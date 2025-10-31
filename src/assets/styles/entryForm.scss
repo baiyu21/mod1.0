@@ -1,0 +1,98 @@
+// 统一表单容器
+.ef-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+// 卡片标题
+.ef-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.ef-desc-tip {
+  color: #909399;
+  font-weight: 400;
+  margin-left: 8px;
+}
+
+// 介绍文字
+.intro-card .intro-text,
+.ef-intro-card .ef-intro-text {
+  color: #666;
+  line-height: 1.7;
+}
+
+// 区块卡片
+.ef-section-card {
+  position: relative;
+  overflow: hidden;
+}
+.ef-sec-watermark {
+  position: absolute;
+  right: 24px;
+  top: 12px;
+  font-size: 160px;
+  line-height: 1;
+  font-weight: 800;
+  color: rgba(64, 158, 255, 0.12);
+  user-select: none;
+  pointer-events: none;
+}
+
+// 表单项间距统一
+.ef-base-form {
+  :deep(.el-form-item) {
+    margin-bottom: 16px;
+  }
+}
+
+// 让所有报名页卡片之间间距一致
+.ef-form :deep(.el-card) {
+  margin-bottom: 16px;
+}
+
+// 上传宽度
+.ef-upload-block { width: 420px; }
+
+// 标题
+.ef-section-title {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+// 间距工具类
+.ef-mt16 { margin-top: 16px; }
+
+// 操作区
+.ef-actions {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+// 时长输入内联
+.ef-duration {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  .ef-unit { color: #606266; font-size: 14px; }
+}
+
+// 分组区块统一样式
+.ef-song-section,
+.ef-contact-section {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+// 响应式
+@media (max-width: 1024px) {
+  .ef-upload-block { width: 100%; }
+}
