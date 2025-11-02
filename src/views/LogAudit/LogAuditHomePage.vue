@@ -2,9 +2,14 @@
   <div class="logaudit-home">
     <el-card shadow="never" class="stats-card">
       <template #header>
-        <div class="card-title">
-          <el-icon><DataAnalysis /></el-icon>
-          <span>日志统计数据</span>
+        <div class="card-header">
+          <div class="card-title">
+            <el-icon><DataAnalysis /></el-icon>
+            <span>日志统计数据</span>
+          </div>
+          <el-button type="primary" :icon="Download" @click="exportStatistics">
+            导出统计表
+          </el-button>
         </div>
       </template>
       <div class="stats-content">
@@ -67,7 +72,8 @@
 <script lang="ts" setup name="LogAuditHomePage">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { DataAnalysis, Operation } from '@element-plus/icons-vue'
+import { DataAnalysis, Operation, Download } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { getLogStats } from '@/services/mock'
 
 const router = useRouter()
@@ -94,6 +100,49 @@ const goToAudit = () => {
   router.push('/logaudit/audit')
 }
 
+// 导出统计表
+const exportStatistics = () => {
+  try {
+    // 构建CSV内容
+    let csvContent = '\ufeff' // BOM for Excel
+    csvContent += '日志审计统计表\n'
+    csvContent += `统计时间：${new Date().toLocaleString('zh-CN')}\n\n`
+
+    // 日志总数统计
+    csvContent += '日志总数统计\n'
+    csvContent += '类型,数量\n'
+    csvContent += `总计,${stats.value.total}\n`
+    csvContent += `用户端,${stats.value.totalByType?.user || 0}\n`
+    csvContent += `审核端,${stats.value.totalByType?.approval || 0}\n`
+    csvContent += `管理员端,${stats.value.totalByType?.admin || 0}\n`
+    csvContent += '\n'
+
+    // 今日新增统计
+    csvContent += '今日新增统计\n'
+    csvContent += '类型,数量\n'
+    csvContent += `总计,${stats.value.todayCount}\n`
+    csvContent += `用户端,${stats.value.todayCountByType?.user || 0}\n`
+    csvContent += `审核端,${stats.value.todayCountByType?.approval || 0}\n`
+    csvContent += `管理员端,${stats.value.todayCountByType?.admin || 0}\n`
+
+    // 下载文件
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `日志审计统计表_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    ElMessage.success('导出统计表成功')
+  } catch (error) {
+    console.error('导出失败:', error)
+    ElMessage.error('导出统计表失败')
+  }
+}
+
 onMounted(() => {
   loadStats()
 })
@@ -104,6 +153,12 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .card-title {

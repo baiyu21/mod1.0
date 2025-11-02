@@ -25,19 +25,23 @@
       <!-- 审核端菜单 -->
       <template v-else-if="userRole === 'approval'">
         <el-menu-item index="/approval">首页</el-menu-item>
-        <div class="menu-section">—— 待审核 ——</div>
-        <el-menu-item index="/approval/pending">待审核记录</el-menu-item>
-        <div class="menu-section">—— 已审核 ——</div>
-        <el-menu-item index="/approval/reviewed">已审核记录</el-menu-item>
+        <div class="menu-section">—— 审核管理 ——</div>
+        <el-menu-item index="/approval/approval">审核报名</el-menu-item>
+        <el-menu-item index="/approval/statistics">报名统计</el-menu-item>
+        <div class="menu-section">—— 系统管理 ——</div>
+        <el-menu-item index="/approval/account">账号管理</el-menu-item>
       </template>
 
-      <!-- 管理员端菜单 -->
+      <!-- 管理员端菜单（复用审核端功能） -->
       <template v-else-if="userRole === 'admin'">
         <el-menu-item index="/admin">首页</el-menu-item>
-        <div class="menu-section">—— 用户管理 ——</div>
-        <el-menu-item index="/admin/users">用户管理</el-menu-item>
-        <div class="menu-section">—— 系统设置 ——</div>
-        <el-menu-item index="/admin/settings">系统设置</el-menu-item>
+        <div class="menu-section">—— 审核管理 ——</div>
+        <el-menu-item index="/admin/approval">审核报名</el-menu-item>
+        <el-menu-item index="/admin/statistics">报名统计</el-menu-item>
+        <div class="menu-section">—— 系统管理 ——</div>
+        <el-menu-item index="/admin/account">账号管理</el-menu-item>
+        <el-menu-item index="/admin/tips">提示管理</el-menu-item>
+        <el-menu-item index="/admin/category">类型管理</el-menu-item>
       </template>
 
       <!-- 日志审计员端菜单 -->

@@ -19,118 +19,160 @@ const router = createRouter({
       path: '/user',
       name: 'user-home',
       component: () => import('@/views/user/first.vue'),
-      meta: { roles: ['user'], requiresAuth: true }
+      meta: { roles: ['user'], requiresAuth: true, title: '首页' }
     },
     {
       path: '/user/vocal',
       name: 'vocal',
       component: () => import('@/views/user/EntryFormVocal.vue'),
-      meta: { roles: ['user'], requiresAuth: true }
+      meta: { roles: ['user'], requiresAuth: true, title: '声乐报名' }
     },
     {
       path: '/user/instrumental',
       name: 'instrumental',
       component: () => import('@/views/user/EntryFormInstrumental.vue'),
-      meta: { roles: ['user'], requiresAuth: true }
+      meta: { roles: ['user'], requiresAuth: true, title: '器乐报名' }
     },
     {
       path: '/user/dance',
       name: 'dance',
       component: () => import('@/views/user/EntryFormDance.vue'),
-      meta: { roles: ['user'], requiresAuth: true }
+      meta: { roles: ['user'], requiresAuth: true, title: '舞蹈报名' }
     },
     {
       path: '/user/opera',
       name: 'opera',
       component: () => import('@/views/user/EntryFormOpera.vue'),
-      meta: { roles: ['user'], requiresAuth: true }
+      meta: { roles: ['user'], requiresAuth: true, title: '戏曲报名' }
     },
     {
       path: '/user/recitation',
       name: 'recitation',
       component: () => import('@/views/user/EntryFormRecitation.vue'),
-      meta: { roles: ['user'], requiresAuth: true }
+      meta: { roles: ['user'], requiresAuth: true, title: '朗诵报名' }
     },
     {
       path: '/user/work-calligraphy',
       name: 'work-calligraphy',
       component: () => import('@/views/user/WorkCalligraphy.vue'),
-      meta: { roles: ['user'], requiresAuth: true }
+      meta: { roles: ['user'], requiresAuth: true, title: '书法作品' }
     },
     {
       path: '/user/work-painting',
       name: 'work-painting',
       component: () => import('@/views/user/WorkPainting.vue'),
-      meta: { roles: ['user'], requiresAuth: true }
+      meta: { roles: ['user'], requiresAuth: true, title: '绘画作品' }
     },
     {
       path: '/user/work-design',
       name: 'work-design',
       component: () => import('@/views/user/WorkDesign.vue'),
-      meta: { roles: ['user'], requiresAuth: true }
+      meta: { roles: ['user'], requiresAuth: true, title: '设计作品' }
     },
     {
       path: '/user/work-photography',
       name: 'work-photography',
       component: () => import('@/views/user/WorkPhotography.vue'),
-      meta: { roles: ['user'], requiresAuth: true }
+      meta: { roles: ['user'], requiresAuth: true, title: '摄影作品' }
     },
     {
       path: '/user/work-microfilm',
       name: 'work-microfilm',
       component: () => import('@/views/user/WorkMicrofilm.vue'),
-      meta: { roles: ['user'], requiresAuth: true }
+      meta: { roles: ['user'], requiresAuth: true, title: '微电影作品' }
     },
     {
       path: '/user/art-practice',
       name: 'art-practice',
       component: () => import('@/views/user/ArtPractice.vue'),
-      meta: { roles: ['user'], requiresAuth: true }
+      meta: { roles: ['user'], requiresAuth: true, title: '艺术实践工作坊报名' }
     },
     {
       path: '/user/aesthetic-innovation',
       name: 'aesthetic-innovation',
       component: () => import('@/views/user/AestheticInnovation.vue'),
-      meta: { roles: ['user'], requiresAuth: true }
+      meta: { roles: ['user'], requiresAuth: true, title: '美育改革创新优秀案例申报' }
     },
     // 审核端路由
     {
       path: '/approval',
       name: 'approval-home',
-      component: () => import('@/views/Approval/ApprovalHomePage.vue'),
-      meta: { roles: ['approval'], requiresAuth: true }
+      component: () => import('@/views/reviewer/IndexPage.vue'),
+      meta: { roles: ['approval'], requiresAuth: true, title: '首页' }
     },
     {
-      path: '/approval/pending',
-      name: 'approval-pending',
-      component: () => import('@/views/Approval/PendingReview.vue'),
-      meta: { roles: ['approval'], requiresAuth: true }
+      path: '/approval/approval',
+      name: 'approval-page',
+      component: () => import('@/views/reviewer/ApprovalPage.vue'),
+      meta: { roles: ['approval'], requiresAuth: true, title: '审核报名' }
     },
-    // 管理员端路由
+    {
+      path: '/approval/statistics',
+      name: 'approval-statistics',
+      component: () => import('@/views/reviewer/StatisticsPage.vue'),
+      meta: { roles: ['approval'], requiresAuth: true, title: '报名统计' }
+    },
+    {
+      path: '/approval/account',
+      name: 'approval-account',
+      component: () => import('@/views/reviewer/AccountPage.vue'),
+      meta: { roles: ['approval'], requiresAuth: true, title: '账号管理' }
+    },
+    // 管理员端路由（复用审核端页面组件）
     {
       path: '/admin',
       name: 'admin-home',
-      component: () => import('@/views/Admin/AdminHomePage.vue'),
-      meta: { roles: ['admin'], requiresAuth: true }
+      component: () => import('@/views/reviewer/IndexPage.vue'),
+      meta: { roles: ['admin'], requiresAuth: true, title: '首页' }
+    },
+    {
+      path: '/admin/approval',
+      name: 'admin-approval',
+      component: () => import('@/views/reviewer/ApprovalPage.vue'),
+      meta: { roles: ['admin'], requiresAuth: true, title: '审核报名' }
+    },
+    {
+      path: '/admin/statistics',
+      name: 'admin-statistics',
+      component: () => import('@/views/reviewer/StatisticsPage.vue'),
+      meta: { roles: ['admin'], requiresAuth: true, title: '报名统计' }
+    },
+    {
+      path: '/admin/account',
+      name: 'admin-account',
+      component: () => import('@/views/reviewer/AccountPage.vue'),
+      meta: { roles: ['admin'], requiresAuth: true, title: '账号管理' }
+    },
+    {
+      path: '/admin/tips',
+      name: 'admin-tips',
+      component: () => import('@/views/Admin/TipsManagement.vue'),
+      meta: { roles: ['admin'], requiresAuth: true, title: '提示管理' }
+    },
+    {
+      path: '/admin/category',
+      name: 'admin-category',
+      component: () => import('@/views/Admin/CategoryManagement.vue'),
+      meta: { roles: ['admin'], requiresAuth: true, title: '类型管理' }
     },
     // 日志审计员端路由
     {
       path: '/logaudit',
       name: 'logaudit-home',
       component: () => import('@/views/LogAudit/LogAuditHomePage.vue'),
-      meta: { roles: ['logaudit'], requiresAuth: true }
+      meta: { roles: ['logaudit'], requiresAuth: true, title: '首页' }
     },
     {
       path: '/logaudit/logs',
       name: 'logaudit-logs',
       component: () => import('@/views/LogAudit/LogView.vue'),
-      meta: { roles: ['logaudit'], requiresAuth: true }
+      meta: { roles: ['logaudit'], requiresAuth: true, title: '操作日志' }
     },
     {
       path: '/logaudit/audit',
       name: 'logaudit-audit',
       component: () => import('@/views/LogAudit/AuditRecord.vue'),
-      meta: { roles: ['logaudit'], requiresAuth: true }
+      meta: { roles: ['logaudit'], requiresAuth: true, title: '审计记录' }
     }
   ],
 })

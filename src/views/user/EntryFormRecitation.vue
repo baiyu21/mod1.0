@@ -19,7 +19,7 @@
           <el-col :span="12">
             <el-form-item label="表演形式">
               <el-select v-model="baseForm.performanceType" placeholder="请选择" style="width: 100%">
-                <el-option label="群舞" value="group-dance" />
+                <el-option label="朗诵" value="group-dance" />
               </el-select>
             </el-form-item>
           </el-col>

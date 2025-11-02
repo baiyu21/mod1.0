@@ -4,9 +4,14 @@
     <!-- 顶部说明 -->
     <el-card shadow="never" class="intro-card">
       <template #header>
-        <div class="ef-card-title">
-          <el-icon><InfoFilled /></el-icon>
-          <span>报名数据统计</span>
+        <div class="ef-card-title-header">
+          <div class="ef-card-title">
+            <el-icon><InfoFilled /></el-icon>
+            <span>报名数据统计</span>
+          </div>
+          <el-button type="primary" :icon="Download" @click="exportStatistics">
+            导出统计表
+          </el-button>
         </div>
       </template>
       <div class="intro-text">
@@ -427,6 +432,70 @@ const paginatedRecords = computed(() => {
   return filteredRecords.value.slice(start, end)
 })
 
+// 导出统计表
+function exportStatistics() {
+  try {
+    // 统计各类别的数量
+    const categoryStats: Record<string, number> = {}
+    allRecords.value.forEach(record => {
+      const category = record.category || '未分类'
+      categoryStats[category] = (categoryStats[category] || 0) + 1
+    })
+
+    // 统计各状态的数量
+    const statusStats: Record<string, number> = {}
+    allRecords.value.forEach(record => {
+      const status = record.status || '未知'
+      statusStats[status] = (statusStats[status] || 0) + 1
+    })
+
+    // 构建CSV内容
+    let csvContent = '\ufeff' // BOM for Excel
+    csvContent += '报名数据统计表\n'
+    csvContent += `统计时间：${new Date().toLocaleString('zh-CN')}\n`
+    csvContent += `总记录数：${allRecords.value.length}\n\n`
+
+    // 按类别统计
+    csvContent += '按类别统计\n'
+    csvContent += '类别,数量\n'
+    Object.entries(categoryStats).forEach(([category, count]) => {
+      csvContent += `${category},${count}\n`
+    })
+    csvContent += '\n'
+
+    // 按状态统计
+    csvContent += '按状态统计\n'
+    csvContent += '状态,数量\n'
+    Object.entries(statusStats).forEach(([status, count]) => {
+      csvContent += `${status},${count}\n`
+    })
+    csvContent += '\n'
+
+    // 详细记录
+    csvContent += '详细记录\n'
+    csvContent += '序号,类别,作品名称,提交时间,状态\n'
+    allRecords.value.forEach((record, index) => {
+      csvContent += `${index + 1},${record.category},${record.workName},${record.submitTime},${record.status}\n`
+    })
+
+    // 下载文件
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `报名数据统计表_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    ElMessage.success('导出统计表成功')
+  } catch (error) {
+    console.error('导出失败:', error)
+    ElMessage.error('导出统计表失败')
+  }
+}
+
 // 处理筛选
 const handleFilter = () => {
   currentPage.value = 1 // 重置到第一页
@@ -514,6 +583,11 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+.ef-card-title-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
 .export-section {
   .export-desc {
     color: #606266;

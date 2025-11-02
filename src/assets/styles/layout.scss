@@ -172,18 +172,18 @@
     border: none;
     color: $tabs-item-color;
     font-size: $tabs-item-font-size;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
     position: relative;
     opacity: 0;
     filter: blur(16px);
-    animation: getUp 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    animation: getUp 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
   }
 
   // 标签页项 - 悬停状态
   :deep(.el-tabs__item:hover) {
     background-color: $tabs-item-bg;
     box-shadow: inset 2px 0 0 $tabs-hover-border;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
   }
 
   // 标签页项 - 选中状态
@@ -194,7 +194,7 @@
     color: $tabs-active-color;
     font-weight: $font-weight-medium;
     z-index: 1;
-    animation: duration 0.35s linear forwards;
+    animation: duration 0.6s linear forwards;
   }
 
   // 关闭图标样式
@@ -206,7 +206,7 @@
     color: white;
     font-size: 12px;
     margin-left: 8px;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
   }
 
   :deep(.el-tabs__item .el-icon-close:hover) {

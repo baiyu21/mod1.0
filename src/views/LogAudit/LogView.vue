@@ -526,7 +526,7 @@ const handleBatchDelete = async () => {
     } else {
       ElMessage.error('删除失败')
     }
-  } catch (error) {
+  } catch {
     // 用户取消
   } finally {
     deleting.value = false

@@ -4,9 +4,13 @@ import { useRoute } from 'vue-router'
 import AppHeader from './components/AppHeader.vue'
 import AppNav from './components/AppNav.vue'
 import { useUserStore } from '@/stores/user'
+import { useTabs } from '@/composables/useTabs'
 
 const route = useRoute()
 const userStore = useUserStore()
+
+// 使用标签页组合式函数
+const { tabs, activeTab, handleTabClick, handleTabRemove } = useTabs()
 
 // 判断是否是登录页
 const isLoginPage = computed(() => route.path === '/login')
@@ -27,6 +31,28 @@ const showLayout = computed(() => !isLoginPage.value && !!userStore.role)
       <AppNav />
       <el-container direction="vertical">
         <AppHeader />
+        <!-- 标签页 -->
+        <div v-if="tabs.length > 0" class="tabs-wrapper">
+          <div class="tabs-container">
+            <el-tabs
+              v-model="activeTab"
+              type="card"
+              closable
+              @tab-click="handleTabClick"
+              @tab-remove="handleTabRemove"
+              class="custom-tabs"
+            >
+              <el-tab-pane
+                v-for="tab in tabs"
+                :key="tab.path"
+                :label="tab.title"
+                :name="tab.path"
+                :closable="tab.closable"
+              >
+              </el-tab-pane>
+            </el-tabs>
+          </div>
+        </div>
         <el-main>
           <router-view />
         </el-main>
@@ -50,4 +76,6 @@ const showLayout = computed(() => !isLoginPage.value && !!userStore.role)
   min-height: 100vh;
   background: #f5f7fa;
 }
+
+// 标签页样式已在 layout.scss 中定义，这里无需重复定义
 </style>

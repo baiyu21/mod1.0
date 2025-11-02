@@ -9,7 +9,7 @@
           </div>
         </div>
       </template>
-      
+
       <el-table
         v-loading="loading"
         :data="registrations"
@@ -21,12 +21,23 @@
         <el-table-column prop="category" label="节目类型" width="150" />
         <el-table-column prop="contactName" label="联系人姓名" width="120" />
         <el-table-column prop="contactPhone" label="联系方式" width="150" />
-        <el-table-column prop="description" label="简介" min-width="200" show-overflow-tooltip />
-        <el-table-column label="操作" width="200" align="center" fixed="right">
+        <el-table-column prop="school" label="大学名称" width="150" />
+        <el-table-column label="简介" min-width="200">
+          <template #default="{ row }">
+            <span class="description-text">
+              {{ row.descriptionTruncated }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column label="查看详情" width="120" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleViewDetail(row)">
               查看详情
             </el-button>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" align="center" fixed="right">
+          <template #default="{ row }">
             <el-button type="success" size="small" @click="handleApprove(row)">
               审核通过
             </el-button>
@@ -36,7 +47,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <!-- 详情对话框 -->
       <el-dialog
         v-model="detailDialogVisible"
@@ -76,7 +87,7 @@
           </el-descriptions>
         </div>
       </el-dialog>
-      
+
       <!-- 审核通过对话框 -->
       <el-dialog
         v-model="approveDialogVisible"
@@ -109,7 +120,7 @@
           </div>
         </template>
       </el-dialog>
-      
+
       <!-- 驳回对话框 -->
       <el-dialog
         v-model="rejectDialogVisible"
@@ -148,9 +159,9 @@
 </template>
 
 <script lang="ts" setup name="PendingReview">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Document } from '@element-plus/icons-vue'
 import type { Registration } from '@/types'
 import {
@@ -162,7 +173,7 @@ import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
 const loading = ref(false)
-const registrations = ref<Registration[]>([])
+const registrationsRaw = ref<Registration[]>([])
 
 // 详情对话框
 const detailDialogVisible = ref(false)
@@ -193,12 +204,31 @@ const rejectRules: FormRules = {
   ]
 }
 
+// 截断简介显示（限制显示字符数）
+const truncateDescription = (text?: string): string => {
+  if (!text || text.trim() === '') return '未填写'
+  const maxLength = 10 // 限制显示10个字符
+  if (text.length <= maxLength) {
+    return text
+  }
+  const truncated = text.substring(0, maxLength) + '...'
+  return truncated
+}
+
+// 处理简介截断的报名记录
+const registrations = computed(() => {
+  return registrationsRaw.value.map(item => ({
+    ...item,
+    descriptionTruncated: truncateDescription(item.description)
+  }))
+})
+
 // 加载待审核记录
 const loadRegistrations = async () => {
   loading.value = true
   try {
     const data = await fetchPendingRegistrations()
-    registrations.value = data
+    registrationsRaw.value = data
   } catch (error) {
     ElMessage.error('加载数据失败')
     console.error(error)
@@ -237,7 +267,7 @@ const handleCloseApprove = () => {
 // 提交审核通过
 const handleSubmitApprove = async () => {
   if (!currentApproveId.value) return
-  
+
   approving.value = true
   try {
     const success = await approveRegistration(
@@ -246,7 +276,7 @@ const handleSubmitApprove = async () => {
       userStore.userId || '审核员',
       approveForm.value.comment || undefined
     )
-    
+
     if (success) {
       ElMessage.success('审核通过')
       approveDialogVisible.value = false
@@ -280,16 +310,16 @@ const handleCloseReject = () => {
 // 提交驳回
 const handleSubmitReject = async () => {
   if (!rejectFormRef.value) return
-  
+
   await rejectFormRef.value.validate((valid) => {
     if (!valid) {
       ElMessage.warning('请填写完整的驳回原因')
       return
     }
   })
-  
+
   if (!currentRejectId.value) return
-  
+
   rejecting.value = true
   try {
     const success = await rejectRegistration(
@@ -298,7 +328,7 @@ const handleSubmitReject = async () => {
       userStore.userId || '审核员',
       rejectForm.value.comment
     )
-    
+
     if (success) {
       ElMessage.success('已驳回')
       rejectDialogVisible.value = false
@@ -326,22 +356,29 @@ onMounted(() => {
     justify-content: space-between;
     align-items: center;
   }
-  
+
   .card-title {
     display: flex;
     align-items: center;
     gap: 8px;
     font-weight: 600;
   }
-  
+
   .detail-content {
     padding: 10px 0;
   }
-  
+
   .dialog-footer {
     display: flex;
     justify-content: flex-end;
     gap: 12px;
+  }
+
+  .description-text {
+    color: #606266;
+    cursor: default;
+    word-break: keep-all;
+    white-space: nowrap;
   }
 }
 </style>
