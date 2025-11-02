@@ -12,14 +12,14 @@ import { authenticate, changePassword as changePasswordService } from '@/service
 export function useAuth() {
   const router = useRouter()
   const userStore = useUserStore()
-  
+
   // 登录状态
   const loading = ref(false)
   const loginForm = ref<LoginForm>({
     username: '',
     password: ''
   })
-  
+
   // 修改密码状态
   const changePasswordVisible = ref(false)
   const changePasswordLoading = ref(false)
@@ -30,7 +30,7 @@ export function useAuth() {
     name: '',
     phone: ''
   })
-  
+
   // 计算属性
   const isLoggedIn = computed(() => !!userStore.role)
   const currentUser = computed(() => ({
@@ -38,7 +38,7 @@ export function useAuth() {
     role: userStore.role,
     permissions: userStore.permissions
   }))
-  
+
   /**
    * 登录
    * @param form 登录表单
@@ -48,7 +48,7 @@ export function useAuth() {
       ElMessage.warning('请输入账号和密码')
       return false
     }
-    
+
     loading.value = true
     try {
       const authResult = await authenticate(form.username, form.password)
@@ -59,7 +59,7 @@ export function useAuth() {
           token: authResult.token
         })
         ElMessage.success('登录成功')
-        
+
         // 根据角色跳转到不同端
         const roleRoutes: Record<UserRole, string> = {
           'user': '/user',
@@ -81,7 +81,7 @@ export function useAuth() {
       loading.value = false
     }
   }
-  
+
   /**
    * 登出
    */
@@ -90,14 +90,14 @@ export function useAuth() {
     router.replace('/login')
     ElMessage.success('已退出登录')
   }
-  
+
   /**
    * 打开修改密码对话框
    */
   const openChangePassword = () => {
     changePasswordVisible.value = true
   }
-  
+
   /**
    * 关闭修改密码对话框
    */
@@ -111,49 +111,61 @@ export function useAuth() {
       phone: ''
     }
   }
-  
+
   /**
    * 提交修改密码
    */
   const submitChangePassword = async () => {
     const form = changePasswordForm.value
-    
+
     // 验证必填项
     if (!form.oldPwd || !form.newPwd || !form.confirmPwd || !form.name || !form.phone) {
       ElMessage.warning('请填写完整信息')
       return
     }
-    
+
     // 验证新密码和确认密码一致
     if (form.newPwd !== form.confirmPwd) {
       ElMessage.error('两次输入的密码不一致')
       return
     }
-    
+
     // 验证新密码长度
     if (form.newPwd.length < 6) {
-      ElMessage.error('新密码长度不能少于6个字符')
+      ElMessage.error('新密码长度不能少于6位')
       return
     }
-    
+
+    // 验证新密码强度：至少包含三种字符类型（数字、大写字母、小写字母、特殊字符中的任意三种）
+    let typeCount = 0
+    if (/\d/.test(form.newPwd)) typeCount++        // 数字
+    if (/[a-z]/.test(form.newPwd)) typeCount++      // 小写字母
+    if (/[A-Z]/.test(form.newPwd)) typeCount++      // 大写字母
+    if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(form.newPwd)) typeCount++  // 特殊字符
+
+    if (typeCount < 3) {
+      ElMessage.error('新密码必须包含三种字符类型（数字、大写字母、小写字母、特殊字符中的任意三种）')
+      return
+    }
+
     // 验证旧密码和新密码不能相同
     if (form.oldPwd === form.newPwd) {
       ElMessage.error('新密码不能与旧密码相同')
       return
     }
-    
+
     // 验证手机号格式（简单验证）
     const phoneRegex = /^1[3-9]\d{9}$/
     if (!phoneRegex.test(form.phone)) {
       ElMessage.error('请输入正确的手机号码')
       return
     }
-    
+
     if (!userStore.userId) {
       ElMessage.error('用户信息异常，请重新登录')
       return
     }
-    
+
     changePasswordLoading.value = true
     try {
       const success = await changePasswordService(
@@ -163,7 +175,7 @@ export function useAuth() {
         form.name,
         form.phone
       )
-      
+
       if (success) {
         ElMessage.success('密码修改成功')
         closeChangePassword()
@@ -177,21 +189,21 @@ export function useAuth() {
       changePasswordLoading.value = false
     }
   }
-  
+
   /**
    * 检查是否有权限
    */
   const hasPermission = (permission: string): boolean => {
     return userStore.hasPermission(permission)
   }
-  
+
   /**
    * 检查是否有角色
    */
   const hasRole = (roles: UserRole[]): boolean => {
     return userStore.hasRole(roles)
   }
-  
+
   /**
    * 重置登录表单
    */
@@ -201,7 +213,7 @@ export function useAuth() {
       password: ''
     }
   }
-  
+
   return {
     // 状态
     loading,
@@ -209,11 +221,11 @@ export function useAuth() {
     changePasswordVisible,
     changePasswordLoading,
     changePasswordForm,
-    
+
     // 计算属性
     isLoggedIn,
     currentUser,
-    
+
     // 方法
     login,
     logout,
