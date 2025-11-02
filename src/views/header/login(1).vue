@@ -1,4 +1,3 @@
-<!-- eslint-disable vue/multi-word-component-names -->
 <script setup lang="ts">
 import { useAuth } from '@/composables/useAuth'
 import { commonRules } from '@/composables/useForm'
@@ -48,36 +47,36 @@ const handleReset = () => {
             <el-button @click="handleReset">重置</el-button>
           </el-form-item>
         </el-form>
-        <div class="hint">示例账号：<br>user1<br>reviewer1<br>admin1<br>logger1<br>密码均为 Test12!</div>
+        <div class="hint">示例账号：<br>user1<br>reviewer1<br>admin1<br>logger1<br>密码均为 123456</div>
       </el-card>
     </div>
+    
   </div>
+  
 </template>
 
 <style scoped lang="scss">
-.main {
+.main{
   height: 100vh;
   width: 100vw;
   display: flex;
   justify-content: space-around;
   align-items: center;
-
-  .leftText {
+  .leftText{
     height: 100vh;
     flex: 1;
-    background-image: url(../../assets/styles/home.webp);
+    background-image: url(../assets/img/ylinBKGC.png);
     background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
     display: flex;
     justify-content: center;
     align-items: center;
-
-    .text {
+    .text{
+      // background-color: rgba(0, 0, 0, 0.338);
       width: fit-content;
       transform: translateY(-60%);
       font-size: min(6vw, 50px);
       color: white;
+      // writing-mode: vertical-rl;
       user-select: none;
       text-orientation: upright;
       font-weight: bold;
@@ -86,13 +85,11 @@ const handleReset = () => {
       margin-left: 20px;
     }
   }
-
-  .rightForm {
+  .rightForm{
     flex: 1;
     display: flex;
     justify-content: center;
     align-items: center;
-
     .login-card {
       width: min(96vw, 420px);
       border-radius: 10px;
@@ -100,24 +97,24 @@ const handleReset = () => {
       display: flex;
       flex-direction: column;
       padding: 30px 20px;
-
-      .el-form-item {
+      .el-form-item{
         margin-bottom: 20px;
         width: 100%;
-
-        .el-input {
+        // background-color: rgba(0, 0, 0, 0.281);
+        .el-input{
           width: 100%;
         }
       }
-
       .title {
         transform: translateX(20px);
-        margin-bottom: 22px;
+        margin-bottom: 22px; 
         user-select: none;
       }
     }
-  }
+  } 
 }
+
+
 </style>
 
 
