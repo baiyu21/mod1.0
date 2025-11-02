@@ -1,11 +1,14 @@
 
 <script lang="ts" setup name="VoiceRegistrationForm">
-import { reactive, ref } from 'vue'
+import { reactive, ref, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import TeacherBlock from '@/components/TeacherBlock.vue'
 import MemberBlock from '@/components/MemberBlock.vue'
 import ConductorBlock from '@/components/ConductorBlock.vue'
 import { InfoFilled, UploadFilled } from '@element-plus/icons-vue'
+import { calculateTotalMemberCount, checkMemberLimit, getMemberLimitInfo } from '@/utils/memberLimit'
+import { useTips } from '@/composables/useTips'
 
 // 定义类型接口
 interface BaseForm {
@@ -150,12 +153,45 @@ const onSave = () => {
 //   accomp.value = []
 // }
 
-const onSubmit = () => {
+const route = useRoute()
+
+// 使用提示词composable
+const { pageTip, pageUploadTip } = useTips()
+
+// 实时人数限制检查 - 检查输入框中的数值
+const memberLimitInfo = computed(() => {
+  const routeName = route.name as string
+  // 对于声乐报名，根据表演形式（合唱、小合唱/表演唱、独唱）获取对应的人数限制
+  const categoryValue = baseForm.performanceType === 'chorus' ? 'chorus' :
+                        baseForm.performanceType === 'ensemble' ? 'ensemble' :
+                        baseForm.performanceType === 'solo' ? 'solo' : undefined
+  return getMemberLimitInfo(routeName, categoryValue)
+})
+
+const isExceededLimit = computed(() => {
+  const { maxCount } = memberLimitInfo.value
+  if (maxCount === undefined || !baseForm.chorusCount) {
+    return false
+  }
+  return baseForm.chorusCount > maxCount
+})
+
+const onSubmit = async () => {
+  // 检查人数限制
+  const rosters = { teachers: teachers.value, members: members.value, accomp: accomp.value }
+  const totalCount = calculateTotalMemberCount(rosters)
+  const routeName = route.name as string
+
+  const passed = await checkMemberLimit(routeName, totalCount)
+  if (!passed) {
+    return
+  }
+
   const payload: SubmitPayload = {
     base: { ...baseForm, durationSec: baseForm.minutes * 60 + baseForm.seconds },
     intro: intro.value,
     files: fileList.value.map(f => ({ name: f.name, size: f.size, type: f.type })),
-    rosters: { teachers: teachers.value, members: members.value, accomp: accomp.value }
+    rosters
   }
   emit('submit', payload)
 }
@@ -171,10 +207,7 @@ const onSubmit = () => {
           <span>声乐作品报名表</span>
         </div>
       </template>
-      <div class="intro-text">
-        合唱：合唱队人数不超过40人，钢琴伴奏1人，指挥1人（应为本校教师），每支合唱队可演唱两首作品（其中至少一首中国作品），演出时间不超过8分钟。<br />
-        小合唱或表演唱：人数不超过15人（含伴奏），不设指挥，不得伴舞，演出时间不超过5分钟。
-      </div>
+      <div class="intro-text" v-html="pageTip.replace(/\n/g, '<br />')"></div>
     </el-card>
 
     <!-- 1 基础信息 -->
@@ -206,11 +239,29 @@ const onSubmit = () => {
           </el-col>
         </el-row>
 
-        <!-- 合唱人数（仅合唱时显示） -->
-        <el-row :gutter="24" v-if="baseForm.performanceType === 'chorus'">
+        <!-- 人数（合唱或小合唱时显示） -->
+        <el-row :gutter="24" v-if="baseForm.performanceType === 'chorus' || baseForm.performanceType === 'ensemble'">
           <el-col :span="12">
-            <el-form-item label="合唱人数">
-              <el-input v-model.number="baseForm.chorusCount" type="number" min="1" placeholder="请输入合唱人数" />
+            <el-form-item :label="baseForm.performanceType === 'chorus' ? '合唱人数' : '小合唱人数'">
+              <el-input
+                v-model.number="baseForm.chorusCount"
+                type="number"
+                min="1"
+                :placeholder="baseForm.performanceType === 'chorus' ? '请输入合唱人数' : '请输入小合唱人数'"
+              />
+              <!-- 人数限制提示 -->
+              <div v-if="memberLimitInfo.maxCount !== undefined && baseForm.chorusCount" class="member-limit-tip-input" :class="{ 'limit-exceeded': isExceededLimit }">
+                <el-alert
+                  v-if="isExceededLimit"
+                  type="error"
+                  :closable="false"
+                  show-icon
+                  :title="`当前人数为 ${baseForm.chorusCount}人，超过了最大人数限制 ${memberLimitInfo.maxCount}人，请减少人数后再提交`"
+                />
+                <div v-else class="limit-info">
+                  当前人数：<strong>{{ baseForm.chorusCount }}人</strong> / 最大人数：<strong>{{ memberLimitInfo.maxCount }}人</strong>
+                </div>
+              </div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -335,7 +386,7 @@ const onSubmit = () => {
         <div class="el-upload__text">将文件拖到此处，或 <em>点击上传</em></div>
         <template #tip>
           <div class="el-upload__tip">
-            支持：音频（mp3/wav）、乐谱（pdf）、图片（jpg/png，建议≥1200×1200）。为统一展演的正常播放，请使用常见编码格式。每个节目的最终材料以本地打包提交，文件大小不宜超过100MB；不要将多个文件打包；严禁含违规内容；请遵守版权规范。
+            {{ pageUploadTip }}
           </div>
         </template>
       </el-upload>
@@ -386,6 +437,21 @@ const onSubmit = () => {
   </div>
 </template>
 <style lang="scss" scoped>
+.member-limit-tip-input {
+  margin-top: 8px;
+
+  .limit-info {
+    color: #606266;
+    font-size: 12px;
+    line-height: 1.5;
+
+    strong {
+      color: #303133;
+      font-weight: 600;
+    }
+  }
+}
+
 .voice-form {
   display: flex;
   flex-direction: column;

@@ -21,6 +21,7 @@ type PageType =
 interface CategoryOption {
   label: string  // 显示文本
   value: string   // 选项值
+  maxMemberCount?: number  // 该类别的人数限制（可选）
 }
 
 // 字段标签名称映射
@@ -142,6 +143,22 @@ function loadCategories(): Record<PageType, CategoryOption[]> {
 // 类别选项数据
 const pageCategories = reactive<Record<PageType, CategoryOption[]>>(loadCategories())
 
+// 从localStorage加载保存的人数限制
+function loadMaxMemberCounts(): Record<PageType, number | undefined> {
+  const saved = localStorage.getItem('pageMaxMemberCounts')
+  if (saved) {
+    try {
+      return JSON.parse(saved)
+    } catch (e) {
+      console.error('Failed to parse saved max member counts:', e)
+    }
+  }
+  return {} as Record<PageType, number | undefined>
+}
+
+// 人数限制数据
+const pageMaxMemberCounts = reactive<Record<PageType, number | undefined>>(loadMaxMemberCounts())
+
 // 搜索和筛选
 const keyword = ref('')
 
@@ -157,6 +174,7 @@ const editingIndex = ref<number | null>(null)
 const editingPageType = ref<PageType | null>(null)
 const editingLabel = ref('')
 const editingValue = ref('')
+const editingMaxMemberCount = ref<number | undefined>(undefined)
 
 // 对话框显示状态
 const dialogVisible = ref(false)
@@ -167,6 +185,7 @@ function openAddDialog(pageType: PageType) {
   editingIndex.value = null
   editingLabel.value = ''
   editingValue.value = ''
+  editingMaxMemberCount.value = undefined
   dialogVisible.value = true
 }
 
@@ -179,6 +198,7 @@ function openEditDialog(pageType: PageType, index: number) {
   editingIndex.value = index
   editingLabel.value = category.label
   editingValue.value = category.value
+  editingMaxMemberCount.value = category.maxMemberCount
   dialogVisible.value = true
 }
 
@@ -210,7 +230,8 @@ function saveEdit() {
 
   const newCategory: CategoryOption = {
     label: editingLabel.value.trim(),
-    value: editingValue.value.trim()
+    value: editingValue.value.trim(),
+    maxMemberCount: editingMaxMemberCount.value
   }
 
   if (editingIndex.value === null) {
@@ -237,6 +258,15 @@ function closeDialog() {
   editingPageType.value = null
   editingLabel.value = ''
   editingValue.value = ''
+  editingMaxMemberCount.value = undefined
+}
+
+// 处理类别人数限制变更
+function handleCategoryMemberCountChange(pageType: PageType, index: number, val: number | undefined) {
+  if (pageCategories[pageType][index]) {
+    pageCategories[pageType][index].maxMemberCount = val
+    saveCategories(pageType)
+  }
 }
 
 // 删除类别
@@ -280,11 +310,26 @@ function saveCategories(pageType: PageType) {
   }
 }
 
+// 保存人数限制
+function saveMaxMemberCount(pageType: PageType) {
+  try {
+    const saved = localStorage.getItem('pageMaxMemberCounts')
+    const existing = saved ? JSON.parse(saved) : {}
+    const updated = { ...existing, [pageType]: pageMaxMemberCounts[pageType] }
+    localStorage.setItem('pageMaxMemberCounts', JSON.stringify(updated))
+    ElMessage.success('已保存人数限制')
+  } catch (e) {
+    console.error('Failed to save max member count:', e)
+    ElMessage.error('保存失败，请重试')
+  }
+}
+
 // 批量保存所有类别
 function saveAllCategories() {
   try {
     localStorage.setItem('pageCategories', JSON.stringify(pageCategories))
-    ElMessage.success('已保存所有类别')
+    localStorage.setItem('pageMaxMemberCounts', JSON.stringify(pageMaxMemberCounts))
+    ElMessage.success('已保存所有类别和人数限制')
   } catch (e) {
     console.error('Failed to save all categories:', e)
     ElMessage.error('保存失败，请重试')
@@ -294,17 +339,20 @@ function saveAllCategories() {
 // 重置为默认值
 function resetToDefault(pageType: PageType) {
   pageCategories[pageType] = [...defaultCategories[pageType]]
+  pageMaxMemberCounts[pageType] = undefined
   saveCategories(pageType)
-  ElMessage.info(`已重置"${pageTypes.find(p => p.type === pageType)?.name}"的类别为默认值`)
+  saveMaxMemberCount(pageType)
+  ElMessage.info(`已重置"${pageTypes.find(p => p.type === pageType)?.name}"的类别和人数限制为默认值`)
 }
 
 // 重置所有为默认值
 function resetAllToDefault() {
   Object.keys(defaultCategories).forEach(key => {
     pageCategories[key as PageType] = [...defaultCategories[key as PageType]]
+    pageMaxMemberCounts[key as PageType] = undefined
   })
   saveAllCategories()
-  ElMessage.info('已重置所有类别为默认值')
+  ElMessage.info('已重置所有类别和人数限制为默认值')
 }
 </script>
 
@@ -361,6 +409,23 @@ function resetAllToDefault() {
             <el-table-column type="index" label="序号" width="60" align="center" />
             <el-table-column :prop="'label'" :label="fieldLabelMap[page.type] + '名称'" min-width="200" />
             <el-table-column prop="value" label="类别值" min-width="100" />
+            <el-table-column label="人数限制" width="180" align="center">
+              <template #default="{ row, $index }">
+                <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                  <el-input-number
+                    :model-value="row.maxMemberCount"
+                    :min="1"
+                    :max="1000"
+                    :precision="0"
+                    size="small"
+                    placeholder="不限制"
+                    style="width: 120px"
+                    @change="(val: number | undefined) => handleCategoryMemberCountChange(page.type, $index, val)"
+                  />
+                  <span style="color: #909399; font-size: 12px;">人</span>
+                </div>
+              </template>
+            </el-table-column>
             <el-table-column label="操作" width="250" fixed="right">
               <template #default="{ $index }">
                 <el-button
@@ -387,6 +452,24 @@ function resetAllToDefault() {
           <div v-if="pageCategories[page.type].length === 0" class="empty-state">
             <el-empty :description='`暂无${fieldLabelMap[page.type]}，点击"添加${fieldLabelMap[page.type]}"按钮添加`' :image-size="100" />
           </div>
+
+          <!-- 人数限制设置 -->
+          <div class="max-member-count-section">
+            <el-form-item label="最大人数限制：" label-width="120px">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <el-input-number
+                  v-model="pageMaxMemberCounts[page.type]"
+                  :min="1"
+                  :max="1000"
+                  :precision="0"
+                  placeholder="请输入最大人数限制"
+                  style="width: 200px"
+                  @change="saveMaxMemberCount(page.type)"
+                />
+                <span style="color: #909399; font-size: 12px;">人（留空表示不限制）</span>
+              </div>
+            </el-form-item>
+          </div>
         </el-card>
       </div>
     </el-card>
@@ -400,7 +483,7 @@ function resetAllToDefault() {
       width="600px"
       @close="closeDialog"
     >
-      <el-form :model="{ label: editingLabel, value: editingValue }" label-width="100px">
+      <el-form :model="{ label: editingLabel, value: editingValue, maxMemberCount: editingMaxMemberCount }" label-width="100px">
         <el-form-item :label="editingPageType ? fieldLabelMap[editingPageType] + '名称' : '类别名称'" required>
           <el-input
             v-model="editingLabel"
@@ -418,6 +501,22 @@ function resetAllToDefault() {
           />
           <div style="color: #909399; font-size: 12px; margin-top: 4px;">
             提示：类别值用于系统存储，建议使用英文或数字，不可重复
+          </div>
+        </el-form-item>
+        <el-form-item label="人数限制">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <el-input-number
+              v-model="editingMaxMemberCount"
+              :min="1"
+              :max="1000"
+              :precision="0"
+              placeholder="不限制"
+              style="width: 200px"
+            />
+            <span style="color: #909399; font-size: 12px;">人（留空表示不限制）</span>
+          </div>
+          <div style="color: #909399; font-size: 12px; margin-top: 4px;">
+            提示：设置该类别的人数上限，留空表示不限制
           </div>
         </el-form-item>
       </el-form>
@@ -494,6 +593,12 @@ function resetAllToDefault() {
 .empty-state {
   padding: 40px 0;
   text-align: center;
+}
+
+.max-member-count-section {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #f0f0f0;
 }
 
 :deep(.el-table) {

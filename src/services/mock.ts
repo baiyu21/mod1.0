@@ -2,14 +2,14 @@ import type { UserRole, OperationLog, AuditRecord, Registration, RegistrationSta
 
 // 模拟用户数据库
 const mockUsers: Record<string, { password: string; role: UserRole; name?: string; phone?: string }> = {
-  'user1': { password: '123456', role: 'user', name: '用户1', phone: '13800138001' },
-  'user2': { password: '123456', role: 'user', name: '用户2', phone: '13800138002' },
-  'reviewer1': { password: '123456', role: 'approval', name: '审核员1', phone: '13800138003' },
-  'reviewer2': { password: '123456', role: 'approval', name: '审核员2', phone: '13800138004' },
-  'admin1': { password: '123456', role: 'admin', name: '管理员1', phone: '13800138005' },
-  'admin2': { password: '123456', role: 'admin', name: '管理员2', phone: '13800138006' },
-  'logger1': { password: '123456', role: 'logaudit', name: '审计员1', phone: '13800138007' },
-  'logger2': { password: '123456', role: 'logaudit', name: '审计员2', phone: '13800138008' }
+  'user1': { password: 'Test12!', role: 'user', name: '用户1', phone: '13800138001' },
+  'user2': { password: 'Test12!', role: 'user', name: '用户2', phone: '13800138002' },
+  'reviewer1': { password: 'Test12!', role: 'approval', name: '审核员1', phone: '13800138003' },
+  'reviewer2': { password: 'Test12!', role: 'approval', name: '审核员2', phone: '13800138004' },
+  'admin1': { password: 'Test12!', role: 'admin', name: '管理员1', phone: '13800138005' },
+  'admin2': { password: 'Test12!', role: 'admin', name: '管理员2', phone: '13800138006' },
+  'logger1': { password: 'Test12!', role: 'logaudit', name: '审计员1', phone: '13800138007' },
+  'logger2': { password: 'Test12!', role: 'logaudit', name: '审计员2', phone: '13800138008' }
 }
 
 /**
@@ -711,5 +711,59 @@ export async function getRegistrationStats(regionFilter?: string): Promise<{
     unReviewed,
     bySchool
   }
+}
+
+// 页面类型定义
+export type PageType =
+  | 'vocal'           // 声乐报名
+  | 'instrumental'    // 器乐报名
+  | 'dance'           // 舞蹈报名
+  | 'opera'           // 戏曲报名
+  | 'recitation'      // 朗诵报名
+  | 'calligraphy'     // 书法作品
+  | 'painting'        // 绘画作品
+  | 'design'          // 设计作品
+  | 'photography'     // 摄影作品
+  | 'microfilm'       // 微电影作品
+  | 'artPractice'     // 艺术实践工作坊报名
+  | 'aestheticInnovation' // 美育改革创新优秀案例申报
+
+/**
+ * 获取指定页面类型的人数限制
+ * @param pageType 页面类型
+ * @returns 最大人数限制，如果未设置则返回undefined
+ */
+export function getMaxMemberCount(pageType: PageType): number | undefined {
+  try {
+    const saved = localStorage.getItem('pageMaxMemberCounts')
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      return parsed[pageType]
+    }
+  } catch (e) {
+    console.error('Failed to parse max member counts:', e)
+  }
+  return undefined
+}
+
+/**
+ * 根据页面类型和类别值获取该类别的人数限制
+ * @param pageType 页面类型
+ * @param categoryValue 类别值（如 'chorus', 'ensemble' 等）
+ * @returns 该类别的人数限制，如果未设置则返回undefined
+ */
+export function getCategoryMemberLimit(pageType: PageType, categoryValue: string): number | undefined {
+  try {
+    const saved = localStorage.getItem('pageCategories')
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      const categories = parsed[pageType] || []
+      const category = categories.find((cat: { value: string; maxMemberCount?: number }) => cat.value === categoryValue)
+      return category?.maxMemberCount
+    }
+  } catch (e) {
+    console.error('Failed to parse category member limits:', e)
+  }
+  return undefined
 }
 

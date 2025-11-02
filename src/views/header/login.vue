@@ -43,7 +43,7 @@ const handleReset = () => {
         <el-button @click="handleReset">重置</el-button>
       </el-form-item>
     </el-form>
-    <div class="hint">示例账号：user1（用户端）/reviewer1（审核端）/admin1（管理员端）/logger1（日志审计员端），密码均为 123456</div>
+    <div class="hint">示例账号：user1（用户端）/reviewer1（审核端）/admin1（管理员端）/logger1（日志审计员端），密码均为 Test12!</div>
   </el-card>
 </template>
 

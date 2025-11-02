@@ -43,6 +43,19 @@
           <el-col :span="12">
             <el-form-item label="表演人数">
               <el-input v-model.number="baseForm.count" type="number" min="1" placeholder="请输入表演人数" />
+              <!-- 人数限制提示 -->
+              <div v-if="memberLimitInfo.maxCount !== undefined && baseForm.count" class="member-limit-tip-input" :class="{ 'limit-exceeded': isExceededLimit }">
+                <el-alert
+                  v-if="isExceededLimit"
+                  type="error"
+                  :closable="false"
+                  show-icon
+                  :title="`当前人数为 ${baseForm.count}人，超过了最大人数限制 ${memberLimitInfo.maxCount}人，请减少人数后再提交`"
+                />
+                <div v-else class="limit-info">
+                  当前人数：<strong>{{ baseForm.count }}人</strong> / 最大人数：<strong>{{ memberLimitInfo.maxCount }}人</strong>
+                </div>
+              </div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -148,8 +161,10 @@
 </template>
 
 <script lang="ts" setup name="RecitationRegistrationForm">
-import { reactive, ref } from 'vue'
+import { reactive, ref, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { calculateTotalMemberCount, checkMemberLimit, getMemberLimitInfo } from '@/utils/memberLimit'
 import RosterBlock from '@/components/RosterBlock.vue'
 import { InfoFilled, UploadFilled } from '@element-plus/icons-vue'
 
@@ -266,18 +281,61 @@ const onSave = () => {
     ElMessage.error('暂存失败，请重试')
   }
 }
-const onSubmit = () => {
+const route = useRoute()
+
+// 实时人数限制检查 - 检查输入框中的数值
+const memberLimitInfo = computed(() => {
+  const routeName = route.name as string
+  // 根据表演形式获取对应的人数限制
+  const categoryValue = baseForm.performanceType || undefined
+  return getMemberLimitInfo(routeName, categoryValue)
+})
+
+const isExceededLimit = computed(() => {
+  const { maxCount } = memberLimitInfo.value
+  if (maxCount === undefined || !baseForm.count) {
+    return false
+  }
+  return baseForm.count > maxCount
+})
+
+const onSubmit = async () => {
+  // 检查人数限制
+  const rosters = { teachers: teachers.value, members: members.value, studentAccomp: studentAccomp.value, teacherAccomp: teacherAccomp.value }
+  const totalCount = calculateTotalMemberCount(rosters)
+  const routeName = route.name as string
+  
+  const passed = await checkMemberLimit(routeName, totalCount)
+  if (!passed) {
+    return
+  }
+  
   const payload: SubmitPayload = {
     base: baseForm,
     intro: intro.value,
     files: fileList.value.map(f => ({ name: f.name, size: f.size, type: f.type })),
-    rosters: { teachers: teachers.value, members: members.value, studentAccomp: studentAccomp.value, teacherAccomp: teacherAccomp.value }
+    rosters
   }
   emit('submit', payload)
 }
 </script>
 
 <style lang="scss" scoped>
+.member-limit-tip-input {
+  margin-top: 8px;
+
+  .limit-info {
+    color: #606266;
+    font-size: 12px;
+    line-height: 1.5;
+
+    strong {
+      color: #303133;
+      font-weight: 600;
+    }
+  }
+}
+
 .notice {
   margin-top: 32px;
 }

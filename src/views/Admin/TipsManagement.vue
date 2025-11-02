@@ -138,6 +138,8 @@ function saveTips(pageType: PageType) {
     const existing = saved ? JSON.parse(saved) : {}
     const updated = { ...existing, ...tipsToSave }
     localStorage.setItem('pageTips', JSON.stringify(updated))
+    // 触发自定义事件，通知同窗口内的其他组件
+    window.dispatchEvent(new Event('localStorageChange'))
     ElMessage.success(`已保存"${pageTypes.find(p => p.type === pageType)?.name}"的提示词`)
   } catch (e) {
     console.error('Failed to save tips:', e)
@@ -153,6 +155,8 @@ function saveUploadTip(pageType: PageType) {
     const existing = saved ? JSON.parse(saved) : {}
     const updated = { ...existing, ...tipsToSave }
     localStorage.setItem('pageUploadTips', JSON.stringify(updated))
+    // 触发自定义事件，通知同窗口内的其他组件
+    window.dispatchEvent(new Event('localStorageChange'))
     ElMessage.success(`已保存"${pageTypes.find(p => p.type === pageType)?.name}"的上传提示`)
   } catch (e) {
     console.error('Failed to save upload tip:', e)
@@ -165,6 +169,8 @@ function saveAllTips() {
   try {
     localStorage.setItem('pageTips', JSON.stringify(pageTips))
     localStorage.setItem('pageUploadTips', JSON.stringify(pageUploadTips))
+    // 触发自定义事件，通知同窗口内的其他组件
+    window.dispatchEvent(new Event('localStorageChange'))
     ElMessage.success('已保存所有提示词')
   } catch (e) {
     console.error('Failed to save all tips:', e)
