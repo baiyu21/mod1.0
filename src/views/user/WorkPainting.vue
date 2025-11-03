@@ -1,8 +1,9 @@
 <script lang="ts" setup>
 import { ref, reactive } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { InfoFilled, UploadFilled } from '@element-plus/icons-vue'
 import RosterBlock from '@/components/RosterBlock.vue'
+import { commonRules } from '@/composables/useForm'
 
 interface BaseForm {
   title: string
@@ -68,6 +69,15 @@ const authorColumns: Column[] = [
 
 const authors = ref<RosterItem[]>([])
 
+// 表单引用和验证规则
+const formRef = ref<FormInstance>()
+const formRules: FormRules = {
+  contact: commonRules.contactName,
+  phone: commonRules.phone,
+  address: commonRules.address,
+  tutor: commonRules.contactName
+}
+
 // 暂存功能
 const onSave = () => {
   const saveData = {
@@ -87,11 +97,24 @@ const onSave = () => {
 }
 
 // 提交功能
-const onSubmit = () => {
+const onSubmit = async () => {
   if (!baseForm.notice) {
     ElMessage.warning('请先阅读并同意报名须知')
     return
   }
+
+  // 表单验证
+  if (!formRef.value) return
+  await formRef.value.validate((valid) => {
+    if (!valid) {
+      ElMessage.warning('请填写完整的表单信息')
+      return
+    }
+  }).catch(() => {
+    ElMessage.warning('请填写完整的表单信息')
+    return
+  })
+
   // TODO: 实现提交逻辑
   ElMessage.success('提交成功')
 }
@@ -114,7 +137,7 @@ const onSubmit = () => {
     <el-card shadow="never" class="ef-section-card">
       <template #header><div class="ef-card-title"><span>作品信息</span></div></template>
       <div class="ef-sec-watermark">1</div>
-      <el-form :model="baseForm" label-width="120px" class="ef-base-form">
+      <el-form ref="formRef" :model="baseForm" :rules="formRules" label-width="120px" class="ef-base-form">
         <el-row :gutter="24">
           <el-col :span="12">
             <el-form-item label="作品名称">
@@ -122,8 +145,8 @@ const onSubmit = () => {
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="指导教师">
-              <el-input v-model="baseForm.tutor" placeholder="指导教师姓名" />
+            <el-form-item label="指导教师" prop="tutor">
+              <el-input v-model="baseForm.tutor" placeholder="请输入中文姓名" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -177,20 +200,20 @@ const onSubmit = () => {
           <h4 class="ef-section-title">联系信息</h4>
           <el-row :gutter="24">
             <el-col :span="12">
-              <el-form-item label="联系人姓名">
-                <el-input v-model="baseForm.contact" placeholder="联系人姓名" />
+              <el-form-item label="联系人姓名" prop="contact">
+                <el-input v-model="baseForm.contact" placeholder="请输入中文姓名" />
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="联系人电话">
-                <el-input v-model="baseForm.phone" placeholder="手机号" />
+              <el-form-item label="联系人电话" prop="phone">
+                <el-input v-model="baseForm.phone" placeholder="请输入11位手机号" maxlength="11" />
               </el-form-item>
             </el-col>
           </el-row>
           <el-row :gutter="24">
             <el-col :span="24">
-              <el-form-item label="联系地址">
-                <el-input v-model="baseForm.address" placeholder="联系地址" />
+              <el-form-item label="联系地址" prop="address">
+                <el-input v-model="baseForm.address" placeholder="请输入详细地址（至少5个字符）" />
               </el-form-item>
             </el-col>
           </el-row>
@@ -263,8 +286,8 @@ const onSubmit = () => {
       </div>
     </div>
     <div class="ef-actions">
-      <el-button size="large" @click="onSave">暂存</el-button>
-      <el-button type="primary" size="large" @click="onSubmit">提交报名表</el-button>
+      <el-button size="large" @click="onSave" :disabled="readonly">暂存</el-button>
+      <el-button type="primary" size="large" @click="onSubmit" :disabled="readonly || !baseForm.notice">提交报名表</el-button>
     </div>
   </div>
 </template>

@@ -14,7 +14,7 @@
     <el-card shadow="never" class="ef-section-card sec-1">
       <template #header><div class="ef-card-title"><span>作品信息</span></div></template>
       <div class="ef-sec-watermark">1</div>
-      <el-form :model="baseForm" label-width="120px" :disabled="readonly" class="ef-base-form">
+      <el-form ref="formRef" :model="baseForm" :rules="formRules" label-width="120px" :disabled="readonly" class="ef-base-form">
         <el-row :gutter="24">
           <el-col :span="12">
             <el-form-item label="表演形式">
@@ -73,20 +73,20 @@
           <h4 class="ef-section-title">联系信息</h4>
           <el-row :gutter="24">
             <el-col :span="12">
-              <el-form-item label="联系人姓名">
-                <el-input v-model="baseForm.contact" placeholder="联系人姓名" />
+              <el-form-item label="联系人姓名" prop="contact">
+                <el-input v-model="baseForm.contact" placeholder="请输入中文姓名" />
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="联系人电话">
-                <el-input v-model="baseForm.phone" placeholder="手机号" />
+              <el-form-item label="联系人电话" prop="phone">
+                <el-input v-model="baseForm.phone" placeholder="请输入11位手机号" maxlength="11" />
               </el-form-item>
             </el-col>
           </el-row>
           <el-row :gutter="24">
             <el-col :span="12">
-              <el-form-item label="联系地址">
-                <el-input v-model="baseForm.address" placeholder="联系地址" />
+              <el-form-item label="联系地址" prop="address">
+                <el-input v-model="baseForm.address" placeholder="请输入详细地址（至少5个字符）" />
               </el-form-item>
             </el-col>
             <el-col :span="12">
@@ -155,7 +155,7 @@
     </div>
     <div class="ef-actions">
       <el-button size="large" @click="onSave" :disabled="readonly">暂存</el-button>
-      <el-button type="primary" size="large" @click="onSubmit">提交报名表</el-button>
+      <el-button type="primary" size="large" @click="onSubmit" :disabled="readonly || !baseForm.notice">提交报名表</el-button>
     </div>
   </div>
 </template>
@@ -163,10 +163,11 @@
 <script lang="ts" setup name="RecitationRegistrationForm">
 import { reactive, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { calculateTotalMemberCount, checkMemberLimit, getMemberLimitInfo } from '@/utils/memberLimit'
 import RosterBlock from '@/components/RosterBlock.vue'
 import { InfoFilled, UploadFilled } from '@element-plus/icons-vue'
+import { commonRules } from '@/composables/useForm'
 
 interface BaseForm {
   performanceType: string
@@ -212,6 +213,15 @@ interface SubmitPayload {
 }
 defineProps<{ readonly?: boolean }>()
 const emit = defineEmits<{ (e: 'submit', payload: SubmitPayload): void }>()
+
+// 表单引用和验证规则
+const formRef = ref<FormInstance>()
+const formRules: FormRules = {
+  contact: commonRules.contactName,
+  phone: commonRules.phone,
+  address: commonRules.address
+}
+
 const baseForm = reactive<BaseForm>({
   performanceType: '',
   workName: '',
@@ -300,6 +310,24 @@ const isExceededLimit = computed(() => {
 })
 
 const onSubmit = async () => {
+  // 检查是否已同意报名须知
+  if (!baseForm.notice) {
+    ElMessage.warning('请先阅读并同意报名须知')
+    return
+  }
+
+  // 表单验证
+  if (!formRef.value) return
+  await formRef.value.validate((valid) => {
+    if (!valid) {
+      ElMessage.warning('请填写完整的表单信息')
+      return
+    }
+  }).catch(() => {
+    ElMessage.warning('请填写完整的表单信息')
+    return
+  })
+
   // 检查人数限制
   const rosters = { teachers: teachers.value, members: members.value, studentAccomp: studentAccomp.value, teacherAccomp: teacherAccomp.value }
   const totalCount = calculateTotalMemberCount(rosters)

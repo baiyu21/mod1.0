@@ -22,8 +22,8 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="负责人姓名">
-              <el-input v-model="baseForm.leaderName" placeholder="请输入负责人姓名" />
+            <el-form-item label="负责人姓名" prop="leaderName">
+              <el-input v-model="baseForm.leaderName" placeholder="请输入中文姓名" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -34,7 +34,7 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="电子邮箱">
+            <el-form-item label="电子邮箱" prop="email">
               <el-input v-model="baseForm.email" type="email" placeholder="请输入电子邮箱" />
             </el-form-item>
           </el-col>
@@ -58,8 +58,8 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="负责人电话">
-              <el-input v-model="baseForm.leaderPhone" placeholder="请输入负责人电话" />
+            <el-form-item label="负责人电话" prop="leaderPhone">
+              <el-input v-model="baseForm.leaderPhone" placeholder="请输入11位手机号" maxlength="11" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -121,7 +121,7 @@
     </div>
     <div class="ef-actions">
       <el-button size="large" @click="onSave" :disabled="readonly">暂存</el-button>
-      <el-button type="primary" size="large" @click="onSubmit">提交报名表</el-button>
+      <el-button type="primary" size="large" @click="onSubmit" :disabled="readonly || !baseForm.notice">提交报名表</el-button>
     </div>
   </div>
 </template>
@@ -174,6 +174,14 @@ interface SubmitPayload {
 defineProps<{ readonly?: boolean }>()
 const emit = defineEmits<{ (e: 'submit', payload: SubmitPayload): void }>()
 
+// 表单引用和验证规则
+const formRef = ref<FormInstance>()
+const formRules: FormRules = {
+  leaderName: commonRules.contactName,
+  leaderPhone: commonRules.phone,
+  email: commonRules.email
+}
+
 const baseForm = reactive<BaseForm>({
   caseName: '',
   leaderName: '',
@@ -213,7 +221,25 @@ const onSave = () => {
     ElMessage.error('暂存失败，请重试')
   }
 }
-const onSubmit = () => {
+const onSubmit = async () => {
+  // 检查是否已同意报名须知
+  if (!baseForm.notice) {
+    ElMessage.warning('请先阅读并同意报名须知')
+    return
+  }
+
+  // 表单验证
+  if (!formRef.value) return
+  await formRef.value.validate((valid) => {
+    if (!valid) {
+      ElMessage.warning('请填写完整的表单信息')
+      return
+    }
+  }).catch(() => {
+    ElMessage.warning('请填写完整的表单信息')
+    return
+  })
+
   const payload: SubmitPayload = {
     base: baseForm,
     intro: intro.value,
