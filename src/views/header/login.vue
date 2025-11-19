@@ -96,12 +96,15 @@ const handleReset = () => {
           </el-form-item>
         </el-form>
         <div class="hint">
-          <div class="hint-title">示例账号</div>
+          <div class="hint-title">测试账号</div>
           <div class="hint-content">
-            <span>user1</span> | <span>reviewer1</span> | <span>admin1</span> |
-            <span>logger1</span>
+            <span>tsy1</span> | <span>tsy2</span> | <span>tsy3</span> |
+            <span>tsy4</span>
           </div>
-          <div class="hint-password">密码均为 <strong>Test12!</strong></div>
+          <div class="hint-password">密码均为 <strong>Tsy123456</strong></div>
+          <div class="hint-role" style="margin-top: 0.5rem; font-size: 0.75rem; color: #909399;">
+            （用户端 | 管理员端 | 审核端 | 日志端）
+          </div>
         </div>
       </el-card>
     </div>

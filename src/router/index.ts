@@ -178,39 +178,50 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, from, next) => {
-  const userStore = useUserStore()
-  const requiresAuth = to.meta.requiresAuth !== false
-  const roles = to.meta.roles as string[] | undefined
+router.beforeEach(async (to, from, next) => {
+  try {
+    const userStore = useUserStore()
+    const requiresAuth = to.meta.requiresAuth !== false
+    const roles = to.meta.roles as string[] | undefined
 
-  // 如果不需要认证，直接放行
-  if (!requiresAuth) {
-    next()
-    return
-  }
-
-  // 如果需要认证但未登录，跳转到登录页
-  if (!userStore.role) {
-    next('/login')
-    return
-  }
-
-  // 如果指定了角色，检查是否有权限
-  if (roles && roles.length > 0) {
-    if (!roles.includes(userStore.role)) {
-      // 没有权限，根据当前角色跳转到对应首页
-      const roleRoutes: Record<string, string> = {
-        'user': '/user',
-        'approval': '/approval',
-        'admin': '/admin',
-        'logaudit': '/logaudit'
-      }
-      next(roleRoutes[userStore.role] || '/login')
+    // 如果不需要认证，直接放行
+    if (!requiresAuth) {
+      next()
       return
     }
-  }
 
-  next()
+    // 如果需要认证但未登录，跳转到登录页
+    if (!userStore.role) {
+      next('/login')
+      return
+    }
+
+    // 如果指定了角色，检查是否有权限
+    if (roles && roles.length > 0) {
+      if (!roles.includes(userStore.role)) {
+        // 没有权限，根据当前角色跳转到对应首页
+        const roleRoutes: Record<string, string> = {
+          'user': '/user',
+          'approval': '/approval',
+          'admin': '/admin',
+          'logaudit': '/logaudit'
+        }
+        next(roleRoutes[userStore.role] || '/login')
+        return
+      }
+    }
+
+    next()
+  } catch (error) {
+    console.error('路由守卫错误:', error)
+    next('/login')
+  }
+})
+
+// 路由错误处理
+router.onError((error) => {
+  console.error('路由加载错误:', error)
+  // 可以在这里添加错误提示
 })
 
 export default router

@@ -139,8 +139,8 @@
     <el-card shadow="never" class="ef-section-card sec-4">
       <template #header><div class="ef-card-title"><span>报名花名册</span></div></template>
       <div class="ef-sec-watermark">4</div>
-      <RosterBlock title="指导教师" :columns="teacherColumns" v-model:rows="teachers" :readonly="readonly" />
-      <RosterBlock class="ef-mt16" title="参赛人员" :columns="memberColumns" v-model:rows="members" :readonly="readonly" />
+      <TeacherBlock v-model:rows="teachers" :readonly="readonly" />
+      <MemberBlock class="ef-mt16" v-model:rows="members" :readonly="readonly" />
 
     </el-card>
     <div class="notice">
@@ -167,9 +167,11 @@ import { reactive, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { calculateTotalMemberCount, checkMemberLimit, getMemberLimitInfo } from '@/utils/memberLimit'
-import RosterBlock from '@/components/RosterBlock.vue'
+import TeacherBlock from '@/components/TeacherBlock.vue'
+import MemberBlock from '@/components/MemberBlock.vue'
 import { InfoFilled, UploadFilled } from '@element-plus/icons-vue'
 import { commonRules } from '@/composables/useForm'
+import { registrationApi } from '@/services/api'
 
 interface BaseForm {
   performanceType: string
@@ -188,6 +190,7 @@ interface FileItem {
   name: string
   size: number
   type?: string
+  url?: string
 }
 interface RosterItem {
   name?: string
@@ -198,9 +201,14 @@ interface RosterItem {
   idNo?: string
   nation?: string
   major?: string
+  majorName?: string // 专业名称（与专业类别区分）
   region?: string
   school?: string
   dept?: string
+  age?: number | string
+  grade?: string
+  studentId?: string
+  studentNo?: string // 兼容学号字段
 }
 interface SubmitPayload {
   base: BaseForm
@@ -239,35 +247,6 @@ const baseForm = reactive<BaseForm>({
 const intro = ref('')
 const accepts = '.mp3,.wav,.pdf,.jpg,.jpeg,.png'
 const fileList = ref<FileItem[]>([])
-type Column = {
-  prop: string
-  label: string
-  width?: number
-  type?: 'text' | 'select'
-  options?: Array<{ label: string; value: string }>
-}
-const teacherColumns: Column[] = [
-  { prop: 'name', label: '姓名', width: 120 },
-  { prop: 'gender', label: '性别', width: 100, type: 'select', options: [{ label:'男', value:'male' }, { label:'女', value:'female' }] },
-  { prop: 'title', label: '职称/专业', width: 160 },
-  { prop: 'nation', label: '民族', width: 100 },
-  { prop: 'idNo', label: '身份证号', width: 200 },
-  { prop: 'school', label: '学校名称', width: 160 },
-  { prop: 'org', label: '所属院系/部门', width: 180 },
-  { prop: 'phone', label: '联系方式', width: 160 }
-]
-const memberColumns: Column[] = [
-  { prop: 'name', label: '姓名', width: 120 },
-  { prop: 'idNo', label: '身份证号', width: 200 },
-  { prop: 'nation', label: '民族', width: 100 },
-  { prop: 'major', label: '专业类别', width: 160 },
-  { prop: 'grade', label: '年级', width: 100 },
-  { prop: 'gender', label: '性别', width: 100, type: 'select', options: [{ label:'男', value:'male' }, { label:'女', value:'female' }] },
-  { prop: 'region', label: '所在地区', width: 140 },
-  { prop: 'school', label: '学校名称', width: 160 },
-  { prop: 'dept', label: '所在院系/部门', width: 180 },
-  { prop: 'phone', label: '联系方式', width: 160 }
-]
 
 const teachers = ref<RosterItem[]>([])
 const members = ref<RosterItem[]>([])
@@ -309,6 +288,134 @@ const isExceededLimit = computed(() => {
   return baseForm.count > maxCount
 })
 
+/**
+ * 转换花名册数据为后端格式 - 指导教师
+ * 注意：如果前端没有输入框但后端需要，使用默认值
+ */
+const transformGuideTeachers = (teachers: RosterItem[]) => {
+  console.log('[transformGuideTeachers] 原始数据:', teachers)
+  console.log('[transformGuideTeachers] 原始数据长度:', teachers.length)
+
+  // 详细检查每条记录
+  teachers.forEach((teacher, index) => {
+    console.log(`[transformGuideTeachers] 教师 ${index} 的完整数据:`, JSON.parse(JSON.stringify(teacher)))
+    console.log(`[transformGuideTeachers] 教师 ${index} 的所有键:`, Object.keys(teacher || {}))
+  })
+
+  const result = teachers
+    .filter(teacher => {
+      // 尝试多种可能的字段名
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const nameValue = teacher.name || (teacher as any).姓名 || (teacher as any).Name || ''
+      const hasName = nameValue && String(nameValue).trim()
+      console.log('[transformGuideTeachers] 过滤检查:', {
+        name: teacher.name,
+        nameValue,
+        hasName,
+        allKeys: Object.keys(teacher || {})
+      })
+      return hasName
+    }) // 只包含有姓名的记录
+    .map(teacher => {
+      // 处理民族字段：如果输入的是"汉"，转换为"汉族"
+      const nationValue = String(teacher.nation || '').trim()
+      const ethnicity = nationValue === '汉' ? '汉族' : (nationValue || '汉族')
+
+      const transformed = {
+        name: String(teacher.name || '').trim(),
+        id_card_number: String(teacher.idNo || '').trim() || '000000000000000000', // 默认身份证号
+        ethnicity: ethnicity, // 确保是"汉族"而不是"汉"
+        age: Number(teacher.age) || 35, // 默认年龄35岁（教师）
+        gender: teacher.gender === 'male' ? 'male' : (teacher.gender === 'female' ? 'female' : 'male'), // 默认男性
+        region: String(teacher.region || '').trim() || '北京市', // 默认地区
+        school_name: String(teacher.school || '').trim() || '未填写', // 默认学校
+        department: String(teacher.org || teacher.dept || '').trim() || '未填写', // 默认部门
+        phone: String(teacher.phone || '').trim() || '13800000000' // 默认手机号
+      }
+      return transformed
+    })
+  console.log('[transformGuideTeachers] 转换后数据:', result)
+  return result
+}
+
+/**
+ * 转换参赛人员数据为后端格式
+ * 注意：如果前端没有输入框但后端需要，使用默认值
+ */
+const transformParticipants = (members: RosterItem[]) => {
+  console.log('[transformParticipants] 原始数据:', members)
+  console.log('[transformParticipants] 原始数据长度:', members.length)
+
+  // 详细检查每条记录
+  members.forEach((member, index) => {
+    console.log(`[transformParticipants] 成员 ${index} 的完整数据:`, JSON.parse(JSON.stringify(member)))
+    console.log(`[transformParticipants] 成员 ${index} 的所有键:`, Object.keys(member || {}))
+  })
+
+  const result = members
+    .filter(member => {
+      // 尝试多种可能的字段名
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const nameValue = member.name || (member as any).姓名 || (member as any).Name || ''
+      const hasName = nameValue && String(nameValue).trim()
+      console.log('[transformParticipants] 过滤检查:', {
+        name: member.name,
+        nameValue,
+        hasName,
+        allKeys: Object.keys(member || {})
+      })
+      return hasName
+    }) // 只包含有姓名的记录
+    .map(member => {
+      // 处理民族字段：如果输入的是"汉"，转换为"汉族"
+      const nationValue = String(member.nation || '').trim()
+      const ethnicity = nationValue === '汉' ? '汉族' : (nationValue || '汉族')
+
+      const transformed = {
+        name: String(member.name || '').trim(),
+        id_card_number: String(member.idNo || '').trim() || '000000000000000000', // 默认身份证号
+        ethnicity: ethnicity, // 确保是"汉族"而不是"汉"
+        age: Number(member.age) || 20, // 默认年龄20岁（学生）
+        gender: member.gender === 'male' ? 'male' : (member.gender === 'female' ? 'female' : 'male'), // 默认男性
+        region: String(member.region || '').trim() || '北京市', // 默认地区
+        school_name: String(member.school || '').trim() || '未填写', // 默认学校
+        department: String(member.dept || '').trim() || '未填写', // 默认部门
+        grade: String(member.grade || '').trim() || '大四', // 默认年级
+        major_category: String(member.major || '').trim() || '艺术', // 默认专业类别
+        major_name: String(member.majorName || member.major || '').trim() || '未填写', // 专业名称（优先使用 majorName，如果没有则使用 major）
+        student_id: String(member.studentId || member.studentNo || '').trim() || '20200001', // 默认学号
+        phone: String(member.phone || '').trim() || '13800000000' // 默认手机号
+      }
+      return transformed
+    })
+  console.log('[transformParticipants] 转换后数据:', result)
+  return result
+}
+
+/**
+ * 映射表演形式
+ */
+const mapPerformanceType = (type: string): string => {
+  const typeMap: Record<string, string> = {
+    'ensemble': 'ensemble',
+    'small-ensemble': 'small_ensemble',
+    'chamber': 'chamber',
+    'solo': 'solo'
+  }
+  return typeMap[type] || type
+}
+
+/**
+ * 映射组别
+ */
+const mapGroupType = (group: string): string => {
+  const groupMap: Record<string, string> = {
+    'group1': 'amateur',
+    'group2': 'professional'
+  }
+  return groupMap[group] || group
+}
+
 const onSubmit = async () => {
   // 检查是否已同意报名须知
   if (!baseForm.notice) {
@@ -318,33 +425,122 @@ const onSubmit = async () => {
 
   // 表单验证
   if (!formRef.value) return
-  await formRef.value.validate((valid) => {
-    if (!valid) {
-      ElMessage.warning('请填写完整的表单信息')
-      return
-    }
-  }).catch(() => {
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) {
     ElMessage.warning('请填写完整的表单信息')
     return
-  })
+  }
 
   // 检查人数限制
   const rosters = { teachers: teachers.value, members: members.value, accomp: accomp.value }
   const totalCount = calculateTotalMemberCount(rosters)
   const routeName = route.name as string
-  
+
   const passed = await checkMemberLimit(routeName, totalCount)
   if (!passed) {
     return
   }
-  
-  const payload: SubmitPayload = {
-    base: baseForm,
-    intro: intro.value,
-    files: fileList.value.map(f => ({ name: f.name, size: f.size, type: f.type })),
-    rosters
+
+  // 检查花名册数据
+  console.log('[onSubmit] 原始花名册数据:', {
+    teachers: teachers.value,
+    members: members.value,
+    teachersCount: teachers.value.length,
+    membersCount: members.value.length
+  })
+
+  // 详细检查每条记录
+  if (teachers.value.length > 0) {
+    console.log('[onSubmit] 第一条教师数据详情:', JSON.parse(JSON.stringify(teachers.value[0])))
+    console.log('[onSubmit] 第一条教师数据的所有键:', Object.keys(teachers.value[0] || {}))
   }
-  emit('submit', payload)
+  if (members.value.length > 0) {
+    console.log('[onSubmit] 第一条成员数据详情:', JSON.parse(JSON.stringify(members.value[0])))
+    console.log('[onSubmit] 第一条成员数据的所有键:', Object.keys(members.value[0] || {}))
+  }
+
+  // 转换花名册数据
+  const guideTeachersData = transformGuideTeachers(teachers.value)
+  const participantsData = transformParticipants(members.value)
+
+  console.log('[onSubmit] 转换后的花名册数据:', {
+    guideTeachers: guideTeachersData,
+    participants: participantsData,
+    guideTeachersCount: guideTeachersData.length,
+    participantsCount: participantsData.length
+  })
+
+  // 验证花名册数据（至少需要有一个参赛人员）
+  if (participantsData.length === 0) {
+    ElMessage.warning('请至少添加一个参赛人员')
+    return
+  }
+
+  // 构建后端接口数据
+  // 注意：work_file 需要先上传文件获取URL，如果为空则使用默认值
+  const workFile = fileList.value.length > 0 && fileList.value[0]
+    ? (fileList.value[0].url || `https://example.com/path/to/your/file.${fileList.value[0].name.split('.').pop() || 'mp3'}`)
+    : 'https://example.com/path/to/your/file.mp3' // 默认文件URL
+
+  // 严格按照后端接口要求的字段格式构建数据
+  const apiData = {
+    work_file: workFile,
+    work_title: baseForm.workName || '',
+    performance_type: mapPerformanceType(baseForm.performanceType),
+    duration_minutes: baseForm.minutes || 0,
+    duration_seconds: baseForm.seconds || 0,
+    performer_count: baseForm.count || members.value.length || 1,
+    contact_name: baseForm.contact || '',
+    contact_phone: baseForm.phone || '',
+    contact_address: baseForm.address || '',
+    group_type: mapGroupType(baseForm.group),
+    is_original: baseForm.isOriginal || false,
+    work_description: intro.value || '',
+    status: 'draft',
+    guide_teachers: guideTeachersData,
+    participants: participantsData,
+    conductor: {
+      conductor_choice: '学生指挥' // 默认值，如果前端有输入框可以修改
+    }
+  }
+
+  console.log('[onSubmit] 提交的完整数据:', JSON.stringify(apiData, null, 2))
+
+  // 调用后端接口
+  try {
+    const success = await registrationApi.submitInstrumental(apiData)
+    if (success) {
+      ElMessage.success('提交成功')
+
+      // 保存到 localStorage 作为已提交的记录
+      const payload: SubmitPayload = {
+        base: baseForm,
+        intro: intro.value,
+        files: fileList.value.map(f => ({ name: f.name, size: f.size, type: f.type })),
+        rosters
+      }
+      try {
+        const submitData = {
+          base: payload.base,
+          intro: payload.intro,
+          files: payload.files,
+          rosters: payload.rosters,
+          submitTime: new Date().toLocaleString('zh-CN'),
+          status: '待审核'
+        }
+        localStorage.setItem('instrumentFormDraft', JSON.stringify(submitData))
+      } catch (error) {
+        console.error('保存本地记录失败:', error)
+      }
+
+      emit('submit', payload)
+    } else {
+      ElMessage.error('提交失败，请重试')
+    }
+  } catch (error) {
+    console.error('提交失败:', error)
+    ElMessage.error('提交失败，请稍后再试')
+  }
 }
 </script>
 

@@ -136,8 +136,8 @@
     <el-card shadow="never" class="ef-section-card sec-4">
       <template #header><div class="ef-card-title"><span>报名花名册</span></div></template>
       <div class="ef-sec-watermark">4</div>
-      <RosterBlock title="指导教师" :columns="teacherColumns" v-model:rows="teachers" :readonly="readonly" />
-      <RosterBlock class="ef-mt16" title="参赛人员" :columns="memberColumns" v-model:rows="members" :readonly="readonly" />
+      <TeacherBlock v-model:rows="teachers" :readonly="readonly" />
+      <MemberBlock class="ef-mt16" v-model:rows="members" :readonly="readonly" />
     </el-card>
     <div class="notice">
       <div class="notice-content">
@@ -163,7 +163,8 @@ import { reactive, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { calculateTotalMemberCount, checkMemberLimit, getMemberLimitInfo } from '@/utils/memberLimit'
-import RosterBlock from '@/components/RosterBlock.vue'
+import TeacherBlock from '@/components/TeacherBlock.vue'
+import MemberBlock from '@/components/MemberBlock.vue'
 import { InfoFilled, UploadFilled } from '@element-plus/icons-vue'
 import { commonRules } from '@/composables/useForm'
 
@@ -236,35 +237,7 @@ const baseForm = reactive<BaseForm>({
 const intro = ref('')
 const accepts = '.mp3,.wav,.pdf,.jpg,.jpeg,.png'
 const fileList = ref<FileItem[]>([])
-type Column = {
-  prop: string
-  label: string
-  width?: number
-  type?: 'text' | 'select'
-  options?: Array<{ label: string; value: string }>
-}
-const teacherColumns: Column[] = [
-  { prop: 'name', label: '姓名', width: 120 },
-  { prop: 'gender', label: '性别', width: 100, type: 'select', options: [{ label:'男', value:'male' }, { label:'女', value:'female' }] },
-  { prop: 'title', label: '职称/专业', width: 160 },
-  { prop: 'nation', label: '民族', width: 100 },
-  { prop: 'idNo', label: '身份证号', width: 200 },
-  { prop: 'school', label: '学校名称', width: 160 },
-  { prop: 'org', label: '所属院系/部门', width: 180 },
-  { prop: 'phone', label: '联系方式', width: 160 }
-]
-const memberColumns: Column[] = [
-  { prop: 'name', label: '姓名', width: 120 },
-  { prop: 'idNo', label: '身份证号', width: 200 },
-  { prop: 'nation', label: '民族', width: 100 },
-  { prop: 'major', label: '专业类别', width: 160 },
-  { prop: 'grade', label: '年级', width: 100 },
-  { prop: 'gender', label: '性别', width: 100, type: 'select', options: [{ label:'男', value:'male' }, { label:'女', value:'female' }] },
-  { prop: 'region', label: '所在地区', width: 140 },
-  { prop: 'school', label: '学校名称', width: 160 },
-  { prop: 'dept', label: '所在院系/部门', width: 180 },
-  { prop: 'phone', label: '联系方式', width: 160 }
-]
+
 const teachers = ref<RosterItem[]>([])
 const members = ref<RosterItem[]>([])
 const accomp = ref<RosterItem[]>([])

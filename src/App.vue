@@ -47,14 +47,21 @@ const showLayout = computed(() => !isLoginPage.value && !!userStore.role)
                 :key="tab.path"
                 :label="tab.title"
                 :name="tab.path"
-                :closable="tab.closable"
+                :closable="tab.closable !== false"
               >
+                <template #label>
+                  <span>{{ tab.title }}</span>
+                </template>
               </el-tab-pane>
             </el-tabs>
           </div>
         </div>
         <el-main>
-          <router-view />
+          <router-view v-slot="{ Component, route: routeInfo }">
+            <transition name="fade" mode="out-in">
+              <component :is="Component" :key="routeInfo.path" v-if="Component" />
+            </transition>
+          </router-view>
         </el-main>
       </el-container>
     </el-container>
@@ -75,6 +82,17 @@ const showLayout = computed(() => !isLoginPage.value && !!userStore.role)
   align-items: center;
   min-height: 100vh;
   background: #f5f7fa;
+}
+
+// 页面过渡动画
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 // 标签页样式已在 layout.scss 中定义，这里无需重复定义

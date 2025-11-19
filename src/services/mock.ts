@@ -1,39 +1,19 @@
 import type { UserRole, OperationLog, AuditRecord, Registration, RegistrationStatus } from '@/types'
 
-// 模拟用户数据库
-const mockUsers: Record<string, { password: string; role: UserRole; name?: string; phone?: string }> = {
-  'user1': { password: 'Test12!', role: 'user', name: '用户1', phone: '13800138001' },
-  'user2': { password: 'Test12!', role: 'user', name: '用户2', phone: '13800138002' },
-  'reviewer1': { password: 'Test12!', role: 'approval', name: '审核员1', phone: '13800138003' },
-  'reviewer2': { password: 'Test12!', role: 'approval', name: '审核员2', phone: '13800138004' },
-  'admin1': { password: 'Test12!', role: 'admin', name: '管理员1', phone: '13800138005' },
-  'admin2': { password: 'Test12!', role: 'admin', name: '管理员2', phone: '13800138006' },
-  'logger1': { password: 'Test12!', role: 'logaudit', name: '审计员1', phone: '13800138007' },
-  'logger2': { password: 'Test12!', role: 'logaudit', name: '审计员2', phone: '13800138008' }
-}
-
 /**
  * 认证用户
  * @param username 用户名
  * @param password 密码
  * @returns 认证结果，包含用户ID、角色和令牌
+ * @deprecated 现在使用真实接口进行认证，此函数仅保留接口兼容性，始终返回 null
  */
 export async function authenticate(
-  username: string,
-  password: string
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _username: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _password: string
 ): Promise<{ userId: string; role: UserRole; token: string } | null> {
-  // 模拟网络延迟
-  await new Promise(resolve => setTimeout(resolve, 500))
-
-  const user = mockUsers[username]
-  if (user && user.password === password) {
-    return {
-      userId: username,
-      role: user.role,
-      token: `token-${username}-${Date.now()}`
-    }
-  }
-
+  // 已删除假数据校验，请使用真实接口（设置 VITE_USE_MOCK=false）
   return null
 }
 
@@ -45,36 +25,22 @@ export async function authenticate(
  * @param name 姓名
  * @param phone 电话号
  * @returns 是否修改成功
+ * @deprecated 现在使用真实接口进行密码修改，此函数仅保留接口兼容性，始终返回 false
  */
 export async function changePassword(
-  username: string,
-  oldPassword: string,
-  newPassword: string,
-  name: string,
-  phone: string
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _username: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _oldPassword: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _newPassword: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _name: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _phone: string
 ): Promise<boolean> {
-  // 模拟网络延迟
-  await new Promise(resolve => setTimeout(resolve, 500))
-
-  const user = mockUsers[username]
-  if (!user) {
-    return false
-  }
-
-  // 验证旧密码
-  if (user.password !== oldPassword) {
-    return false
-  }
-
-  // 更新密码和用户信息
-  mockUsers[username] = {
-    ...user,
-    password: newPassword,
-    name,
-    phone
-  }
-
-  return true
+  // 已删除假数据校验，请使用真实接口（设置 VITE_USE_MOCK=false）
+  return false
 }
 
 // 操作日志模拟数据

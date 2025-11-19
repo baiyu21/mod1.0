@@ -128,8 +128,9 @@
 
 <script lang="ts" setup name="AestheticInnovationForm">
 import { reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { InfoFilled, UploadFilled } from '@element-plus/icons-vue'
+import { commonRules } from '@/composables/useForm'
 
 interface BaseForm {
   caseName: string
@@ -230,15 +231,11 @@ const onSubmit = async () => {
 
   // 表单验证
   if (!formRef.value) return
-  await formRef.value.validate((valid) => {
-    if (!valid) {
-      ElMessage.warning('请填写完整的表单信息')
-      return
-    }
-  }).catch(() => {
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) {
     ElMessage.warning('请填写完整的表单信息')
     return
-  })
+  }
 
   const payload: SubmitPayload = {
     base: baseForm,

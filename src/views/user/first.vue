@@ -562,37 +562,8 @@ const extractWorkName = (data: Record<string, unknown>, categoryKey: string): st
     }
   }
 
-  // 如果没有找到，生成假数据
-  return generateMockWorkName(categoryKey)
-}
-
-// 生成随机状态
-const getRandomStatus = (): string => {
-  const statuses = ['待审核', '已审核', '未审核']
-  const randomIndex = Math.floor(Math.random() * statuses.length)
-  return statuses[randomIndex] || '未审核'
-}
-
-// 生成假作品名称
-const generateMockWorkName = (categoryKey: string): string => {
-  const mockNames: Record<string, string[]> = {
-    vocal: ['青春之歌', '祖国颂', '黄河大合唱', '歌唱祖国', '我和我的祖国'],
-    instrumental: ['春江花月夜', '二泉映月', '高山流水', '梅花三弄', '十面埋伏'],
-    dance: ['青春舞曲', '茉莉花', '千手观音', '天鹅湖', '红色娘子军'],
-    opera: ['牡丹亭', '白蛇传', '梁祝', '沙家浜', '智取威虎山'],
-    recitation: ['将进酒', '春江花月夜', '再别康桥', '面朝大海春暖花开', '相信未来'],
-    calligraphy: ['兰亭序', '道德经', '论语', '千字文', '百家姓'],
-    painting: ['江山如画', '春山图', '秋韵', '水墨江南', '山水之间'],
-    design: ['现代艺术设计', '传统与现代', '创新思维', '美学探索', '设计理念'],
-    photography: ['城市记忆', '自然风光', '人文纪实', '光影艺术', '时光印记'],
-    microfilm: ['青春记忆', '校园故事', '梦想启航', '成长路上', '时代之声'],
-    artPractice: ['艺术与科技融合', '传统工艺创新', '文化传承工作坊', '创意设计实践', '美育教育探索'],
-    aestheticInnovation: ['高校美育改革实践', '艺术教育创新案例', '美育课程体系建设', '文化育人新模式', '艺术教育实践探索']
-  }
-
-  const names = mockNames[categoryKey] || ['未命名作品']
-  const randomIndex = Math.floor(Math.random() * names.length)
-  return names[randomIndex] || '未命名作品'
+  // 如果没有找到，返回默认值
+  return '未命名作品'
 }
 
 // 加载报名记录
@@ -625,8 +596,8 @@ const loadRegistrationRecords = () => {
             category: getCategoryName(categoryKey),
             categoryKey: categoryKey,
             workName: extractWorkName(parsed, categoryKey),
-            submitTime: new Date().toLocaleString('zh-CN'),
-            status: getRandomStatus(),
+            submitTime: parsed.submitTime || new Date().toLocaleString('zh-CN'),
+            status: parsed.status || '未审核',
             storageKey: storageKey,
             data: parsed
           })
@@ -637,63 +608,7 @@ const loadRegistrationRecords = () => {
     }
   })
 
-  // 如果没有数据，添加一些假数据用于展示
-  if (records.length === 0) {
-    const mockRecords: RegistrationRecord[] = [
-      {
-        index: 1,
-        category: '声乐报名',
-        categoryKey: 'vocal',
-        workName: generateMockWorkName('vocal'),
-        submitTime: new Date(Date.now() - 86400000 * 2).toLocaleString('zh-CN'),
-        status: '待审核',
-        storageKey: 'mock_vocal',
-        data: {}
-      },
-      {
-        index: 2,
-        category: '器乐报名',
-        categoryKey: 'instrumental',
-        workName: generateMockWorkName('instrumental'),
-        submitTime: new Date(Date.now() - 86400000 * 1).toLocaleString('zh-CN'),
-        status: '已审核',
-        storageKey: 'mock_instrumental',
-        data: {}
-      },
-      {
-        index: 3,
-        category: '舞蹈报名',
-        categoryKey: 'dance',
-        workName: generateMockWorkName('dance'),
-        submitTime: new Date().toLocaleString('zh-CN'),
-        status: '未审核',
-        storageKey: 'mock_dance',
-        data: {}
-      },
-      {
-        index: 4,
-        category: '书法作品',
-        categoryKey: 'calligraphy',
-        workName: generateMockWorkName('calligraphy'),
-        submitTime: new Date(Date.now() - 86400000 * 3).toLocaleString('zh-CN'),
-        status: '待审核',
-        storageKey: 'mock_calligraphy',
-        data: {}
-      },
-      {
-        index: 5,
-        category: '绘画作品',
-        categoryKey: 'painting',
-        workName: generateMockWorkName('painting'),
-        submitTime: new Date(Date.now() - 86400000 * 4).toLocaleString('zh-CN'),
-        status: '已审核',
-        storageKey: 'mock_painting',
-        data: {}
-      }
-    ]
-    records.push(...mockRecords)
-  }
-
+  // 不再添加假数据，直接使用从 localStorage 读取的真实数据
   registrationRecords.value = records
   allRecords.value = records
 }

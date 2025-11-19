@@ -3,7 +3,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import type { LoginForm, ChangePasswordForm, UserRole } from '@/types'
-import { authenticate, changePassword as changePasswordService } from '@/services/mock'
+import { authenticate, changePassword as changePasswordService } from '@/services'
 
 /**
  * 认证相关组合式函数
@@ -52,9 +52,11 @@ export function useAuth() {
     loading.value = true
     try {
       const authResult = await authenticate(form.username, form.password)
-      if (authResult) {
+      
+      if (authResult && authResult.token) {
+        // 登录成功：有 token 且不为空
         userStore.login({
-          userId: form.username,
+          userId: authResult.userId || form.username,
           role: authResult.role,
           token: authResult.token
         })
@@ -67,9 +69,16 @@ export function useAuth() {
           'admin': '/admin',
           'logaudit': '/logaudit'
         }
-        router.replace(roleRoutes[authResult.role])
+        const targetRoute = roleRoutes[authResult.role]
+        if (targetRoute) {
+          router.replace(targetRoute)
+        } else {
+          console.error('未知的用户角色，无法跳转:', authResult.role)
+          ElMessage.error('未知的用户角色，无法跳转')
+        }
         return true
       } else {
+        // 登录失败：没有返回结果或没有 token
         ElMessage.error('账号或密码错误')
         return false
       }

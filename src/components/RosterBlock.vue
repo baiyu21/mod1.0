@@ -72,7 +72,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, watch } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as XLSX from 'xlsx'
 import { commonRules } from '@/composables/useForm'
@@ -102,6 +102,7 @@ const uploadRef = ref()
 const rowsLocal = ref<RosterItem[]>(props.rows ? JSON.parse(JSON.stringify(props.rows)) : [])
 
 watch(() => props.rows, (v) => {
+  if (isSyncing) return // 如果正在同步，忽略外部更新，避免循环
   // 只有在 props.rows 真正改变时才更新（避免循环更新）
   const newRows = v ? JSON.parse(JSON.stringify(v)) : []
   // 使用 JSON.stringify 比较，避免不必要的更新导致的覆盖问题
@@ -113,20 +114,34 @@ watch(() => props.rows, (v) => {
   }
 }, { deep: true })
 
+// 监听 rowsLocal 的变化，自动同步到父组件
+// 使用 immediate: false 和 flush: 'post' 避免循环更新
+let isSyncing = false
+watch(rowsLocal, () => {
+  if (isSyncing) return // 防止循环更新
+  // 立即同步，不延迟
+  isSyncing = true
+  sync()
+  isSyncing = false
+}, { deep: true, flush: 'post' })
+
 const reseq = () => rowsLocal.value.forEach((r, i) => (r._seq = i + 1))
 reseq()
 const sync = () => {
-  // 清除错误信息后同步
-  const cleaned = rowsLocal.value.map(row => {
+  // 清除错误信息后同步，优化性能
+  const cleaned: RosterItem[] = []
+  for (let i = 0; i < rowsLocal.value.length; i++) {
+    const row = rowsLocal.value[i]
     const cleanedRow: Record<string, unknown> = {}
-    Object.keys(row).forEach(key => {
+    // 只复制非错误字段，使用 for...in 遍历
+    for (const key in row) {
       if (!key.endsWith('_error')) {
         cleanedRow[key] = row[key]
       }
-    })
-    return cleanedRow
-  })
-  emit('update:rows', cleaned as RosterItem[])
+    }
+    cleaned.push(cleanedRow as RosterItem)
+  }
+  emit('update:rows', cleaned)
 }
 
 /**
@@ -228,11 +243,26 @@ const validateField = (prop: string, row: RosterItem, rowIndex: number) => {
 const addRowBelow = (idx: number) => {
   // 如果索引无效或小于0，则在数组末尾添加
   const at = idx < 0 || isNaN(idx) ? rowsLocal.value.length : Math.max(0, idx + 1)
-  // 创建一个空对象，确保所有列都有对应的属性
-  const newRow: RosterItem = {}
+  // 创建一个新行对象，根据列定义初始化所有字段，确保响应式系统能正确追踪
+  const newRow: RosterItem = {
+    _seq: rowsLocal.value.length + 1
+  }
+  // 根据列定义初始化所有字段为空字符串，确保响应式系统能正确检测
+  props.columns.forEach(col => {
+    newRow[col.prop] = ''
+  })
+  // 临时禁用自动同步，避免触发 watch
+  isSyncing = true
+  // 使用 splice 插入新行，这样 Vue 的响应式系统能正确检测到变化
   rowsLocal.value.splice(at, 0, newRow)
+  // 重新计算序号
   reseq()
+  // 立即同步，确保新行能正确传递到父组件
   sync()
+  // 延迟重置同步标志，确保同步完成
+  nextTick(() => {
+    isSyncing = false
+  })
 }
 const remove = (idx: number) => { rowsLocal.value.splice(idx, 1); reseq(); sync() }
 const clearRows = () => { rowsLocal.value = []; reseq(); sync() }

@@ -1,7 +1,7 @@
 // 标签页相关组合式函数
 // Tabs Composable
 
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { TabItem } from '@/types/tabs'
 
@@ -12,12 +12,12 @@ import type { TabItem } from '@/types/tabs'
 export function useTabs() {
   const route = useRoute()
   const router = useRouter()
-  
+
   // 标签页列表
   const tabs = ref<TabItem[]>([])
   // 当前激活的标签页
   const activeTab = ref<string>('')
-  
+
   /**
    * 添加标签页
    * @param tab 标签页信息
@@ -33,7 +33,7 @@ export function useTabs() {
     }
     activeTab.value = tab.path
   }
-  
+
   /**
    * 移除标签页
    * @param path 标签页路径
@@ -41,9 +41,9 @@ export function useTabs() {
   const removeTab = (path: string) => {
     const index = tabs.value.findIndex(t => t.path === path)
     if (index === -1) return
-    
+
     tabs.value.splice(index, 1)
-    
+
     // 如果移除的是当前激活的标签页，切换到最后一个标签页
     if (activeTab.value === path) {
       const lastTab = tabs.value[tabs.value.length - 1]
@@ -63,7 +63,7 @@ export function useTabs() {
       }
     }
   }
-  
+
   /**
    * 清空所有标签页
    */
@@ -71,7 +71,7 @@ export function useTabs() {
     tabs.value = []
     activeTab.value = ''
   }
-  
+
   /**
    * 关闭其他标签页
    * @param path 保留的标签页路径
@@ -80,7 +80,7 @@ export function useTabs() {
     tabs.value = tabs.value.filter(t => t.path === path)
     activeTab.value = path
   }
-  
+
   /**
    * 关闭所有标签页
    */
@@ -95,17 +95,25 @@ export function useTabs() {
     const role = (route.meta.roles as string[])?.[0] || 'user'
     router.push(defaultPaths[role] || '/user')
   }
-  
+
   /**
    * 处理标签页点击
    * @param tab 标签页对象
    */
   const handleTabClick = (tab: any) => {
-    const targetPath = tab.props.name as string
-    activeTab.value = targetPath
-    router.push(targetPath)
+    try {
+      const targetPath = typeof tab === 'string' ? tab : (tab.props?.name || tab.name || tab)
+      if (targetPath && targetPath !== activeTab.value) {
+        activeTab.value = targetPath
+        router.push(targetPath).catch((error) => {
+          console.error('路由跳转失败:', error)
+        })
+      }
+    } catch (error) {
+      console.error('标签页点击处理错误:', error)
+    }
   }
-  
+
   /**
    * 处理标签页移除
    * @param path 标签页路径
@@ -113,7 +121,7 @@ export function useTabs() {
   const handleTabRemove = (path: string) => {
     removeTab(path)
   }
-  
+
   /**
    * 根据路由名称获取标签页标题
    * @param routeName 路由名称
@@ -125,7 +133,7 @@ export function useTabs() {
     if (route.meta?.title) {
       return route.meta.title as string
     }
-    
+
     if (!routeName || typeof routeName !== 'string') {
       // 根据路径生成标题
       const pathMap: Record<string, string> = {
@@ -159,7 +167,7 @@ export function useTabs() {
       }
       return pathMap[path] || path.split('/').pop() || '页面'
     }
-    
+
     // 根据路由名称映射标题
     const nameMap: Record<string, string> = {
       'user-home': '首页',
@@ -180,7 +188,7 @@ export function useTabs() {
       'admin-home': '首页',
       'logaudit-home': '首页',
     }
-    
+
     return nameMap[routeName] || routeName
   }
 
@@ -192,22 +200,29 @@ export function useTabs() {
       if (newPath === '/login' || newPath === '/404' || newPath === '/403') {
         return
       }
-      
-      const tabTitle = (route.meta?.title as string) || getTabTitle(route.name, newPath)
-      addTab({
-        path: newPath,
-        title: tabTitle,
-        closable: newPath !== '/user' && newPath !== '/approval' && newPath !== '/admin' && newPath !== '/logaudit' // 首页不可关闭
+
+      // 使用 nextTick 确保路由已完全加载后再添加标签页
+      nextTick(() => {
+        try {
+          const tabTitle = (route.meta?.title as string) || getTabTitle(route.name, newPath)
+          addTab({
+            path: newPath,
+            title: tabTitle,
+            closable: newPath !== '/user' && newPath !== '/approval' && newPath !== '/admin' && newPath !== '/logaudit' // 首页不可关闭
+          })
+        } catch (error) {
+          console.error('添加标签页失败:', error)
+        }
       })
     },
     { immediate: true }
   )
-  
+
   return {
     // 状态
     tabs,
     activeTab,
-    
+
     // 方法
     addTab,
     removeTab,
