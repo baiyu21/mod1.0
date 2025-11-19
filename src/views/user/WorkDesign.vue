@@ -1,8 +1,9 @@
 <script lang="ts" setup>
 import { ref, reactive } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { InfoFilled, UploadFilled } from '@element-plus/icons-vue'
+import { InfoFilled } from '@element-plus/icons-vue'
 import RosterBlock from '@/components/RosterBlock.vue'
+import FileUploadBlock from '@/components/FileUploadBlock.vue'
 import { commonRules } from '@/composables/useForm'
 
 interface BaseForm {
@@ -249,20 +250,13 @@ const onSubmit = async () => {
     <el-card shadow="never" class="ef-section-card">
       <template #header><div class="ef-card-title"><span>上传作品</span></div></template>
       <div class="ef-sec-watermark">3</div>
-      <el-upload
-        v-model:file-list="fileList"
-        class="ef-upload-block"
-        drag
-        :auto-upload="false"
-        :limit="10"
+      <FileUploadBlock
+        v-model="fileList"
         :accept="accepts"
-      >
-        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-        <div class="el-upload__text">拖拽到此处或 <em>点击上传</em></div>
-        <template #tip>
-          <div class="el-upload__tip">支持 jpg/png/pdf/mp4，建议提供效果图与说明文档。</div>
-        </template>
-      </el-upload>
+        :limit="10"
+        tip="支持 jpg/png/pdf/mp4，建议提供效果图与说明文档。"
+        upload-text="拖拽到此处或 <em>点击上传</em>"
+      />
     </el-card>
 
     <el-card shadow="never" class="ef-section-card">

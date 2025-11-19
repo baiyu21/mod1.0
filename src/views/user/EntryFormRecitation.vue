@@ -114,24 +114,13 @@
     <el-card shadow="never" class="ef-section-card sec-3">
       <template #header><div class="ef-card-title"><span>上传作品</span></div></template>
       <div class="ef-sec-watermark">3</div>
-      <el-upload
-        v-model:file-list="fileList"
-        class="ef-upload-block"
-        drag
-        multiple
-        :auto-upload="false"
-        :limit="6"
-        :disabled="readonly"
+      <FileUploadBlock
+        v-model="fileList"
         :accept="accepts"
-      >
-        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-        <div class="el-upload__text">将文件拖到此处，或 <em>点击上传</em></div>
-        <template #tip>
-          <div class="el-upload__tip">
-            支持多媒体、文档、图片等多种格式，最终材料请合理打包并控制文件大小。
-          </div>
-        </template>
-      </el-upload>
+        :limit="6"
+        :readonly="readonly"
+        tip="支持多媒体、文档、图片等多种格式，最终材料请合理打包并控制文件大小。"
+      />
     </el-card>
     <el-card shadow="never" class="ef-section-card sec-4">
       <template #header><div class="ef-card-title"><span>报名花名册</span></div></template>
@@ -168,7 +157,8 @@ import { calculateTotalMemberCount, checkMemberLimit, getMemberLimitInfo } from 
 import TeacherBlock from '@/components/TeacherBlock.vue'
 import MemberBlock from '@/components/MemberBlock.vue'
 import RosterBlock from '@/components/RosterBlock.vue'
-import { InfoFilled, UploadFilled } from '@element-plus/icons-vue'
+import FileUploadBlock from '@/components/FileUploadBlock.vue'
+import { InfoFilled } from '@element-plus/icons-vue'
 import { commonRules } from '@/composables/useForm'
 import { teacherColumns, memberColumns } from '@/composables/useRosterColumns'
 

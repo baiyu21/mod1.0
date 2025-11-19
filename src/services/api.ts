@@ -1,4 +1,5 @@
-import { post, get, put, del } from '@/utils/request'
+import { post, get, put, del, uploadFile as uploadFileRequest } from '@/utils/request'
+import { ElMessage } from 'element-plus'
 import type { UserRole, OperationLog, AuditRecord, Registration, RegistrationStatus } from '@/types'
 
 /**
@@ -45,6 +46,7 @@ export interface ReviewParams {
  * API 基础路径配置
  */
 const API_BASE = '/api'
+const FILE_BASE_URL = (import.meta.env.VITE_FILE_BASE_URL as string | undefined) || 'https://filesystem7777.oss-cn-chengdu.aliyuncs.com'
 
 /**
  * 根据账号前缀映射角色（如果后端不返回 role 字段时使用）
@@ -167,6 +169,139 @@ export const authApi = {
 }
 
 /**
+ * 文件上传响应数据
+ */
+export interface UploadFileResponse {
+  success: boolean
+  message: string
+  data: {
+    file_name: string
+    original_name: string
+    file_url: string
+  }
+}
+
+/**
+ * 文件上传接口
+ */
+export const uploadApi = {
+  /**
+   * 上传文件（通用接口）
+   * @param file 文件对象
+   * @param category 类别（vocal, instrumental, dance, opera, recitation 等）
+   * @returns 上传结果，包含文件URL
+   */
+  uploadFile: async (file: File | Blob, category: string = 'vocal'): Promise<string | null> => {
+    const requestUpload = async (targetUrl: string): Promise<string | null> => {
+      console.log('[uploadFile] 上传文件:', {
+        fileName: file instanceof File ? file.name : 'Blob',
+        fileSize: file.size,
+        category,
+        uploadUrl: targetUrl
+      })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await uploadFileRequest<any>(targetUrl, file)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+
+      console.log('[uploadFile] ========== 上传接口响应 ==========')
+      console.log('[uploadFile] 原始响应对象:', response)
+      console.log('[uploadFile] 响应数据结构:', {
+        code: result.code,
+        message: result.message,
+        data: result.data
+      })
+      console.log('[uploadFile] 完整响应JSON:', JSON.stringify(result, null, 2))
+
+      const responseData = result.data || {}
+      let fileUrl = responseData.file_url || responseData.url
+
+      if (!fileUrl && responseData.filename) {
+        const normalizedBase = FILE_BASE_URL.endsWith('/')
+          ? FILE_BASE_URL.slice(0, -1)
+          : FILE_BASE_URL
+        fileUrl = `${normalizedBase}/${responseData.filename}`
+        console.warn('[uploadFile] 响应缺少 file_url，已根据 filename 构造 URL:', fileUrl)
+      }
+
+      if (result.code === 200 && fileUrl) {
+        console.log('[uploadFile] ✅ 上传成功')
+        console.log('[uploadFile] 文件URL:', fileUrl)
+        const fileName = file instanceof File ? file.name : 'unknown'
+        console.log('[uploadFile] 模拟后端响应格式:', {
+          success: true,
+          message: '文件上传成功',
+          data: {
+            file_name: responseData.file_name || fileName,
+            original_name: responseData.original_name || fileName,
+            file_url: fileUrl
+          }
+        })
+        console.log('[uploadFile] ================================')
+        return fileUrl
+      } else if (fileUrl) {
+        console.log('[uploadFile] ✅ 上传成功（兼容格式）')
+        console.log('[uploadFile] 文件URL:', fileUrl)
+        console.log('[uploadFile] ================================')
+        return fileUrl
+      }
+
+      console.error('[uploadFile] ❌ 上传响应格式异常')
+      console.error('[uploadFile] 响应数据:', result)
+      console.error('[uploadFile] ================================')
+      ElMessage.error('文件上传失败：响应格式异常，未找到 file_url')
+      return null
+    }
+
+    const endpointOverrides: Record<string, string[]> = {
+      calligraphy: [`${API_BASE}/calligraphy/calligraphy-upload/`]
+    }
+
+    const defaultCandidates = [
+      `${API_BASE}/${category}/upload/`,
+      `${API_BASE}/upload/`
+    ]
+    const categoryCandidates = endpointOverrides[category] || []
+    const candidateUrls = Array.from(new Set([...categoryCandidates, ...defaultCandidates]))
+
+    let lastError: unknown = null
+
+    for (const targetUrl of candidateUrls) {
+      try {
+        const result = await requestUpload(targetUrl)
+        if (result) {
+          return result
+        }
+        console.warn(`[uploadFile] 接口 ${targetUrl} 未返回有效 URL，尝试下一个候选`)
+      } catch (error: unknown) {
+        lastError = error
+        const status =
+          error &&
+          typeof error === 'object' &&
+          'response' in error
+            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (error as any).response?.status
+            : undefined
+
+        if (status === 404) {
+          console.warn(`[uploadFile] 接口 ${targetUrl} 返回 404，尝试下一个候选`)
+          continue
+        }
+
+        console.error('[uploadFile] 上传失败:', error)
+        return null
+      }
+    }
+
+    if (lastError) {
+      console.error('[uploadFile] 所有上传候选均失败，最后错误:', lastError)
+    }
+    ElMessage.error('文件上传失败：服务器未提供有效上传接口')
+    return null
+  }
+}
+
+/**
  * 报名相关接口
  */
 export const registrationApi = {
@@ -231,6 +366,99 @@ export const registrationApi = {
     } catch (error: unknown) {
       console.error('Submit instrumental registration error:', error)
       // 详细错误信息
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+        console.error('错误请求数据:', axiosError.config?.data)
+      }
+      return false
+    }
+  },
+
+  /**
+   * 提交舞蹈报名
+   * @param data 舞蹈报名数据
+   * @returns 是否提交成功
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  submitDance: async (data: any): Promise<boolean> => {
+    try {
+      console.log('[submitDance] 提交数据:', JSON.stringify(data, null, 2))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>(`${API_BASE}/dance/registrations/`, data)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      if (result.code === 200 || result.success === true) {
+        return true
+      }
+      return false
+    } catch (error: unknown) {
+      console.error('Submit dance registration error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+        console.error('错误请求数据:', axiosError.config?.data)
+      }
+      return false
+    }
+  },
+
+  /**
+   * 提交书法作品报名
+   * @param data 书法表单数据
+   * @returns 是否提交成功
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  submitCalligraphy: async (data: any): Promise<boolean> => {
+    try {
+      console.log('[submitCalligraphy] 提交数据:', JSON.stringify(data, null, 2))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>(`${API_BASE}/calligraphy/calligraphy-registrations/`, data)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      if (result.code === 200 || result.success === true) {
+        return true
+      }
+      return false
+    } catch (error: unknown) {
+      console.error('Submit calligraphy registration error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+        console.error('错误请求数据:', axiosError.config?.data)
+      }
+      return false
+    }
+  },
+
+  /**
+   * 提交戏曲报名
+   * @param data 戏曲报名数据
+   * @returns 是否提交成功
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  submitOpera: async (data: any): Promise<boolean> => {
+    try {
+      console.log('[submitOpera] 提交数据:', JSON.stringify(data, null, 2))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>(`${API_BASE}/opera/registrations/`, data)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      if (result.code === 200 || result.success === true) {
+        return true
+      }
+      return false
+    } catch (error: unknown) {
+      console.error('Submit opera registration error:', error)
       if (error && typeof error === 'object' && 'response' in error) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const axiosError = error as any

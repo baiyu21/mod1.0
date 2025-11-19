@@ -210,3 +210,56 @@ export function del<T = any>(
   return request.delete<ApiResponse<T>>(url, config).then((res) => res.data)
 }
 
+/**
+ * 文件上传请求
+ * @param url 请求地址
+ * @param file 文件对象（File 或 Blob）
+ * @param config 额外配置
+ * @returns Promise<ApiResponse<T>>
+ * @description 文件上传接口可能返回 { success: true, data: { file_url } } 格式，需要特殊处理
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function uploadFile<T = any>(
+  url: string,
+  file: File | Blob,
+  config?: AxiosRequestConfig
+): Promise<ApiResponse<T>> {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  return request.post<ApiResponse<T>>(url, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    },
+    ...config
+  }).then((res) => {
+    // 文件上传接口可能返回 { success: true, data: { file_url } } 格式
+    // 响应拦截器会将没有 code 字段的响应包装为 { code: 200, data: 原始响应 }
+    // 所以这里需要检查 data 中是否包含 success 字段
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const responseData = res as any
+    
+    // 如果响应拦截器已经包装了，data 字段会包含原始响应
+    if (responseData.data && typeof responseData.data === 'object' && 'success' in responseData.data) {
+      // 提取原始响应中的 data 字段
+      const originalData = responseData.data
+      return {
+        code: originalData.success ? 200 : 400,
+        message: originalData.message || (originalData.success ? 'success' : 'failed'),
+        data: originalData.data
+      } as ApiResponse<T>
+    }
+    
+    // 如果响应中直接有 success 字段（响应拦截器未处理的情况）
+    if (responseData.success !== undefined && !('code' in responseData)) {
+      return {
+        code: responseData.success ? 200 : 400,
+        message: responseData.message || (responseData.success ? 'success' : 'failed'),
+        data: responseData.data
+      } as ApiResponse<T>
+    }
+    
+    return res
+  })
+}
+

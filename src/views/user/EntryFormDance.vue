@@ -114,24 +114,15 @@
     <el-card shadow="never" class="ef-section-card sec-3">
       <template #header><div class="ef-card-title"><span>上传作品</span></div></template>
       <div class="ef-sec-watermark">3</div>
-      <el-upload
-        v-model:file-list="fileList"
-        class="ef-upload-block"
-        drag
-        multiple
-        :auto-upload="false"
-        :limit="6"
-        :disabled="readonly"
+      <FileUploadBlock
+        ref="fileUploadRef"
+        v-model="fileList"
         :accept="accepts"
-      >
-        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-        <div class="el-upload__text">将文件拖到此处，或 <em>点击上传</em></div>
-        <template #tip>
-          <div class="el-upload__tip">
-            支持：音频、视频、图片、PDF等多种格式。为展演播放，请使用常见编码，每个节目的最终材料以本地打包提交，文件大小不宜超过100MB，不要将多个文件打包。
-          </div>
-        </template>
-      </el-upload>
+        :limit="6"
+        :readonly="readonly"
+        :upload-category="'dance'"
+        tip="支持：音频、视频、图片、PDF等多种格式。为展演播放，请使用常见编码，每个节目的最终材料以本地打包提交，文件大小不宜超过100MB，不要将多个文件打包。"
+      />
     </el-card>
     <el-card shadow="never" class="ef-section-card sec-4">
       <template #header><div class="ef-card-title"><span>报名花名册</span></div></template>
@@ -165,8 +156,10 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { calculateTotalMemberCount, checkMemberLimit, getMemberLimitInfo } from '@/utils/memberLimit'
 import TeacherBlock from '@/components/TeacherBlock.vue'
 import MemberBlock from '@/components/MemberBlock.vue'
-import { InfoFilled, UploadFilled } from '@element-plus/icons-vue'
+import FileUploadBlock, { type FileItem as UploadFileItem } from '@/components/FileUploadBlock.vue'
+import { InfoFilled } from '@element-plus/icons-vue'
 import { commonRules } from '@/composables/useForm'
+import { registrationApi } from '@/services/api'
 
 // 表单类型可根据实际舞蹈需求调整，当前基本复用声乐结构
 interface BaseForm {
@@ -181,11 +174,6 @@ interface BaseForm {
   group: string
   notice: boolean
   count?: number
-}
-interface FileItem {
-  name: string
-  size: number
-  type?: string
 }
 interface RosterItem {
   name?: string
@@ -203,7 +191,7 @@ interface RosterItem {
 interface SubmitPayload {
   base: BaseForm
   intro: string
-  files: FileItem[]
+  files: UploadFileItem[]
   rosters: {
     teachers: RosterItem[]
     members: RosterItem[]
@@ -236,7 +224,8 @@ const baseForm = reactive<BaseForm>({
 })
 const intro = ref('')
 const accepts = '.mp3,.wav,.pdf,.jpg,.jpeg,.png'
-const fileList = ref<FileItem[]>([])
+const fileList = ref<UploadFileItem[]>([])
+const fileUploadRef = ref<InstanceType<typeof FileUploadBlock>>()
 
 const teachers = ref<RosterItem[]>([])
 const members = ref<RosterItem[]>([])
@@ -278,26 +267,87 @@ const isExceededLimit = computed(() => {
   return baseForm.count > maxCount
 })
 
+const mapPerformanceType = (type: string): string => {
+  const typeMap: Record<string, string> = {
+    'group-dance': 'group',
+    'solo-dance': 'solo'
+  }
+  return typeMap[type] || 'group'
+}
+
+const mapGroupType = (group: string): string => {
+  const groupMap: Record<string, string> = {
+    'group1': 'amateur',
+    'group2': 'professional'
+  }
+  return groupMap[group] || group
+}
+
+const transformGuideTeachers = (teachersList: RosterItem[]) => {
+  return teachersList
+    .filter(teacher => {
+      const nameValue = teacher.name || ''
+      return nameValue && String(nameValue).trim()
+    })
+    .map(teacher => {
+      const nationValue = String(teacher.nation || '').trim()
+      const ethnicity = nationValue === '汉' ? '汉族' : (nationValue || '汉族')
+
+      return {
+        name: String(teacher.name || '').trim(),
+        id_card_number: String(teacher.idNo || '').trim() || '000000000000000000',
+        ethnicity,
+        age: Number(teacher.age) || 35,
+        gender: teacher.gender === 'male' ? 'male' : (teacher.gender === 'female' ? 'female' : 'female'),
+        region: String(teacher.region || '').trim() || '北京市',
+        school_name: String(teacher.school || '').trim() || '未填写',
+        department: String(teacher.org || teacher.dept || '').trim() || '未填写',
+        phone: String(teacher.phone || '').trim() || '13800000000'
+      }
+    })
+}
+
+const transformParticipants = (membersList: RosterItem[]) => {
+  return membersList
+    .filter(member => {
+      const nameValue = member.name || ''
+      return nameValue && String(nameValue).trim()
+    })
+    .map(member => {
+      const nationValue = String(member.nation || '').trim()
+      const ethnicity = nationValue === '汉' ? '汉族' : (nationValue || '汉族')
+
+      return {
+        name: String(member.name || '').trim(),
+        id_card_number: String(member.idNo || '').trim() || '000000000000000000',
+        ethnicity,
+        age: Number(member.age) || 20,
+        gender: member.gender === 'male' ? 'male' : (member.gender === 'female' ? 'female' : 'female'),
+        region: String(member.region || '').trim() || '北京市',
+        school_name: String(member.school || '').trim() || '未填写',
+        department: String(member.dept || '').trim() || '未填写',
+        grade: String(member.grade || '').trim() || '大二',
+        major_category: String(member.major || '').trim() || '艺术类',
+        major_name: String(member.major || '').trim() || '舞蹈表演',
+        student_id: String(member.studentId || member.studentNo || '').trim() || '20210001',
+        phone: String(member.phone || '').trim() || '13800000000'
+      }
+    })
+}
+
 const onSubmit = async () => {
-  // 检查是否已同意报名须知
   if (!baseForm.notice) {
     ElMessage.warning('请先阅读并同意报名须知')
     return
   }
 
-  // 表单验证
   if (!formRef.value) return
-  await formRef.value.validate((valid) => {
-    if (!valid) {
-      ElMessage.warning('请填写完整的表单信息')
-      return
-    }
-  }).catch(() => {
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) {
     ElMessage.warning('请填写完整的表单信息')
     return
-  })
+  }
 
-  // 检查人数限制
   const rosters = { teachers: teachers.value, members: members.value, accomp: accomp.value }
   const totalCount = calculateTotalMemberCount(rosters)
   const routeName = route.name as string
@@ -307,13 +357,87 @@ const onSubmit = async () => {
     return
   }
 
-  const payload: SubmitPayload = {
-    base: baseForm,
-    intro: intro.value,
-    files: fileList.value.map(f => ({ name: f.name, size: f.size, type: f.type })),
-    rosters
+  const guideTeachersData = transformGuideTeachers(teachers.value)
+  const participantsData = transformParticipants(members.value)
+
+  if (participantsData.length === 0) {
+    ElMessage.warning('请至少添加一个参赛人员')
+    return
   }
-  emit('submit', payload)
+
+  let workFile = 'https://example.com/path/to/your/file.mp3'
+  if (fileList.value.length > 0) {
+    const firstFileUrl = fileUploadRef.value?.getFirstFileUrl()
+    if (firstFileUrl) {
+      workFile = firstFileUrl
+    } else {
+      ElMessage.info('正在上传文件，请稍候...')
+      const uploadedUrls = await fileUploadRef.value?.uploadAllFiles()
+      if (uploadedUrls && uploadedUrls.length > 0) {
+        workFile = uploadedUrls[0]
+      } else {
+        ElMessage.error('文件上传失败，请重试')
+        return
+      }
+    }
+  }
+
+  const apiData = {
+    work_file: workFile,
+    work_title: baseForm.workName || '',
+    performance_type: mapPerformanceType(baseForm.performanceType),
+    duration_minutes: baseForm.minutes || 0,
+    duration_seconds: baseForm.seconds || 0,
+    performer_count: baseForm.count || members.value.length || 1,
+    contact_name: baseForm.contact || '',
+    contact_phone: baseForm.phone || '',
+    contact_address: baseForm.address || '',
+    group_type: mapGroupType(baseForm.group),
+    is_original: baseForm.isOriginal || false,
+    work_description: intro.value || '',
+    status: 'draft',
+    guide_teachers: guideTeachersData,
+    participants: participantsData
+  }
+
+  try {
+    const success = await registrationApi.submitDance(apiData)
+    if (success) {
+      ElMessage.success('提交成功')
+
+      const payload: SubmitPayload = {
+        base: baseForm,
+        intro: intro.value,
+        files: fileList.value.map(f => ({
+          name: f.name,
+          size: f.size,
+          type: f.type
+        })),
+        rosters
+      }
+
+      try {
+        const submitData = {
+          base: payload.base,
+          intro: payload.intro,
+          files: payload.files,
+          rosters: payload.rosters,
+          submitTime: new Date().toLocaleString('zh-CN'),
+          status: '待审核'
+        }
+        localStorage.setItem('danceFormDraft', JSON.stringify(submitData))
+      } catch (error) {
+        console.error('保存本地记录失败:', error)
+      }
+
+      emit('submit', payload)
+    } else {
+      ElMessage.error('提交失败，请重试')
+    }
+  } catch (error) {
+    console.error('提交失败:', error)
+    ElMessage.error('提交失败，请稍后再试')
+  }
 }
 </script>
 

@@ -109,24 +109,13 @@
     <el-card shadow="never" class="ef-section-card sec-4">
       <template #header><div class="ef-card-title"><span>上传工作坊视频</span></div></template>
       <div class="ef-sec-watermark">4</div>
-      <el-upload
-        v-model:file-list="fileList"
-        class="ef-upload-block"
-        drag
-        multiple
-        :auto-upload="false"
-        :limit="6"
-        :disabled="readonly"
+      <FileUploadBlock
+        v-model="fileList"
         :accept="accepts"
-      >
-        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-        <div class="el-upload__text">将文件拖到此处，或 <em>点击上传</em></div>
-        <template #tip>
-          <div class="el-upload__tip">
-            支持：音频、视频、图片、PDF等多种格式。为展演播放，请使用常见编码，每个节目的最终材料以本地打包提交，文件大小不宜超过100MB，不要将多个文件打包。
-          </div>
-        </template>
-      </el-upload>
+        :limit="6"
+        :readonly="readonly"
+        tip="支持：音频、视频、图片、PDF等多种格式。为展演播放，请使用常见编码，每个节目的最终材料以本地打包提交，文件大小不宜超过100MB，不要将多个文件打包。"
+      />
     </el-card>
     <el-card shadow="never" class="ef-section-card sec-5">
       <template #header><div class="ef-card-title"><span>指导教师</span></div></template>
@@ -156,7 +145,8 @@
 import { reactive, ref } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import RosterBlock from '@/components/RosterBlock.vue'
-import { InfoFilled, UploadFilled } from '@element-plus/icons-vue'
+import { InfoFilled } from '@element-plus/icons-vue'
+import FileUploadBlock from '@/components/FileUploadBlock.vue'
 import { commonRules } from '@/composables/useForm'
 
 interface BaseForm {

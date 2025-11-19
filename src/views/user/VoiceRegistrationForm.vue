@@ -3,7 +3,8 @@
 import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import RosterBlock from '@/components/RosterBlock.vue'
-import { InfoFilled, UploadFilled } from '@element-plus/icons-vue'
+import { InfoFilled } from '@element-plus/icons-vue'
+import FileUploadBlock from '@/components/FileUploadBlock.vue'
 
 // 定义类型接口
 interface BaseForm {
@@ -360,24 +361,19 @@ const onSubmit = () => {
     <el-card shadow="never" class="section-card sec-3">
       <template #header><div class="card-title"><span>上传作品</span></div></template>
       <div class="sec-watermark">3</div>
-      <el-upload
-        v-model:file-list="fileList"
-        class="upload-block"
-        drag
-        multiple
-        :auto-upload="false"
-        :limit="6"
-        :disabled="readonly"
+      <FileUploadBlock
+        v-model="fileList"
         :accept="accepts"
+        :limit="6"
+        :readonly="readonly"
+        upload-class="upload-block"
       >
-        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-        <div class="el-upload__text">将文件拖到此处，或 <em>点击上传</em></div>
         <template #tip>
           <div class="el-upload__tip">
             支持：音频（mp3/wav）、乐谱（pdf）、图片（jpg/png，建议≥1200×1200）。为统一展演的正常播放，请使用常见编码格式。每个节目的最终材料以本地打包提交，文件大小不宜超过100MB；不要将多个文件打包；严禁含违规内容；请遵守版权规范。
           </div>
         </template>
-      </el-upload>
+      </FileUploadBlock>
     </el-card>
 
     <!-- 4 花名册 -->

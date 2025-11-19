@@ -1,9 +1,11 @@
 <script lang="ts" setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { InfoFilled, UploadFilled } from '@element-plus/icons-vue'
+import { InfoFilled } from '@element-plus/icons-vue'
 import RosterBlock from '@/components/RosterBlock.vue'
+import FileUploadBlock from '@/components/FileUploadBlock.vue'
 import { commonRules } from '@/composables/useForm'
+import { registrationApi } from '@/services/api'
 
 interface BaseForm {
   title: string
@@ -39,9 +41,11 @@ interface FileItem {
   name: string
   size: number
   type?: string
+  url?: string
 }
 
 const fileList = ref<FileItem[]>([])
+const fileUploadRef = ref<InstanceType<typeof FileUploadBlock>>()
 const accepts = '.jpg,.jpeg,.png,.pdf'
 
 // 作者信息表格
@@ -78,6 +82,33 @@ const formRules: FormRules = {
   tutor: commonRules.contactName
 }
 
+const props = defineProps<{ readonly?: boolean }>()
+const readonly = computed(() => props.readonly ?? false)
+
+const mapGroupType = (group: string) => {
+  const map: Record<string, string> = {
+    group1: 'amateur',
+    group2: 'professional'
+  }
+  return map[group] || 'amateur'
+}
+
+const transformAuthors = (rows: RosterItem[]) => {
+  return rows
+    .filter(row => row.name && String(row.name).trim())
+    .map(row => ({
+      name: String(row.name || '').trim(),
+      id_card_number: String(row.idNo || '').trim() || '000000000000000000',
+      region: String(row.region || '').trim() || '未填写',
+      school_name: String(row.school || '').trim() || '未填写',
+      department: String(row.dept || '').trim() || '未填写',
+      major_category: String(row.majorType || '').trim() || '艺术类',
+      major_name: String(row.major || '').trim() || '书法专业',
+      student_id: String(row.studentNo || '').trim() || '20200001',
+      phone: String(row.phone || '').trim() || '13800000000'
+    }))
+}
+
 // 暂存功能
 const onSave = () => {
   const saveData = {
@@ -105,18 +136,78 @@ const onSubmit = async () => {
 
   // 表单验证
   if (!formRef.value) return
-  await formRef.value.validate((valid) => {
-    if (!valid) {
-      ElMessage.warning('请填写完整的表单信息')
-      return
-    }
-  }).catch(() => {
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) {
     ElMessage.warning('请填写完整的表单信息')
     return
-  })
+  }
 
-  // TODO: 实现提交逻辑
-  ElMessage.success('提交成功')
+  const authorData = transformAuthors(authors.value)
+  if (authorData.length === 0) {
+    ElMessage.warning('请至少添加一位作者')
+    return
+  }
+
+  let workFile = 'https://example.com/sample_calligraphy.pdf'
+  if (fileList.value.length > 0) {
+    const firstFileUrl = fileUploadRef.value?.getFirstFileUrl()
+    if (firstFileUrl) {
+      workFile = firstFileUrl
+    } else {
+      ElMessage.info('正在上传文件，请稍候...')
+      const uploadedUrls = await fileUploadRef.value?.uploadAllFiles()
+      if (uploadedUrls && uploadedUrls.length > 0 && uploadedUrls[0]) {
+        workFile = uploadedUrls[0]
+      } else {
+        ElMessage.error('文件上传失败，请重试')
+        return
+      }
+    }
+  }
+
+  const apiData = {
+    work_title: baseForm.title || '',
+    instructor_name: baseForm.tutor || '',
+    contact_name: baseForm.contact || '',
+    contact_phone: baseForm.phone || '',
+    contact_address: baseForm.address || '',
+    creation_date: baseForm.createAt || '',
+    work_length: Number(baseForm.length) || 0,
+    work_width: Number(baseForm.width) || 0,
+    art_form: baseForm.formType || 'calligraphy',
+    group_type: mapGroupType(baseForm.group),
+    author_biography: authorIntro.value || '',
+    creation_description: creationIntro.value || '',
+    work_file: workFile,
+    authors: authorData
+  }
+
+  try {
+    console.log('[CalligraphySubmit] payload:', JSON.stringify(apiData, null, 2))
+    const success = await registrationApi.submitCalligraphy(apiData)
+    if (success) {
+      ElMessage.success('提交成功')
+      const submitData = {
+        base: { ...baseForm },
+        authorIntro: authorIntro.value,
+        creationIntro: creationIntro.value,
+        files: fileList.value,
+        authors: authors.value,
+        submitTime: new Date().toLocaleString('zh-CN'),
+        status: '待审核'
+      }
+      try {
+        localStorage.setItem('calligraphyFormDraft', JSON.stringify(submitData))
+      } catch (error) {
+        console.error('保存本地记录失败:', error)
+      }
+    } else {
+      ElMessage.error('提交失败，请重试')
+    }
+  } catch (error) {
+    console.error('提交失败:', error)
+    ElMessage.error('提交失败，请稍后再试')
+  }
 }
 </script>
 
@@ -250,20 +341,16 @@ const onSubmit = async () => {
     <el-card shadow="never" class="ef-section-card">
       <template #header><div class="ef-card-title"><span>上传作品</span></div></template>
       <div class="ef-sec-watermark">3</div>
-      <el-upload
-        v-model:file-list="fileList"
-        class="ef-upload-block"
-        drag
-        :auto-upload="false"
-        :limit="6"
+      <FileUploadBlock
+        ref="fileUploadRef"
+        v-model="fileList"
         :accept="accepts"
-      >
-        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-        <div class="el-upload__text">拖拽到此处或 <em>点击上传</em></div>
-        <template #tip>
-          <div class="el-upload__tip">支持 jpg/png/pdf，建议单张≥2000px。</div>
-        </template>
-      </el-upload>
+        :limit="6"
+        :readonly="readonly"
+        upload-category="calligraphy"
+        tip="支持 jpg/png/pdf，建议单张≥2000px。"
+        upload-text="拖拽到此处或 <em>点击上传</em>"
+      />
     </el-card>
 
     <el-card shadow="never" class="ef-section-card">

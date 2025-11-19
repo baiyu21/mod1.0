@@ -6,7 +6,8 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import TeacherBlock from '@/components/TeacherBlock.vue'
 import MemberBlock from '@/components/MemberBlock.vue'
 import ConductorBlock from '@/components/ConductorBlock.vue'
-import { InfoFilled, UploadFilled } from '@element-plus/icons-vue'
+import FileUploadBlock from '@/components/FileUploadBlock.vue'
+import { InfoFilled } from '@element-plus/icons-vue'
 import { calculateTotalMemberCount, checkMemberLimit, getMemberLimitInfo } from '@/utils/memberLimit'
 import { useTips } from '@/composables/useTips'
 import { commonRules } from '@/composables/useForm'
@@ -220,7 +221,7 @@ const onSubmit = async () => {
     files: fileList.value.map(f => ({ name: f.name, size: f.size, type: f.type })),
     rosters
   }
-  
+
   // 保存到 localStorage 作为已提交的记录
   try {
     const submitData = {
@@ -414,24 +415,19 @@ const onSubmit = async () => {
     <el-card shadow="never" class="section-card sec-3">
       <template #header><div class="card-title"><span>上传作品</span></div></template>
       <div class="sec-watermark">3</div>
-      <el-upload
-        v-model:file-list="fileList"
-        class="upload-block"
-        drag
-        multiple
-        :auto-upload="false"
-        :limit="6"
-        :disabled="readonly"
+      <FileUploadBlock
+        v-model="fileList"
         :accept="accepts"
+        :limit="6"
+        :readonly="readonly"
+        upload-class="upload-block"
       >
-        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-        <div class="el-upload__text">将文件拖到此处，或 <em>点击上传</em></div>
         <template #tip>
           <div class="el-upload__tip">
             {{ pageUploadTip }}
           </div>
         </template>
-      </el-upload>
+      </FileUploadBlock>
     </el-card>
 
     <!-- 4 花名册 -->

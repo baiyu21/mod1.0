@@ -117,24 +117,15 @@
     <el-card shadow="never" class="ef-section-card sec-3">
       <template #header><div class="ef-card-title"><span>上传作品</span></div></template>
       <div class="ef-sec-watermark">3</div>
-      <el-upload
-        v-model:file-list="fileList"
-        class="ef-upload-block"
-        drag
-        multiple
-        :auto-upload="false"
-        :limit="6"
-        :disabled="readonly"
+      <FileUploadBlock
+        ref="fileUploadRef"
+        v-model="fileList"
         :accept="accepts"
-      >
-        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-        <div class="el-upload__text">将文件拖到此处，或 <em>点击上传</em></div>
-        <template #tip>
-          <div class="el-upload__tip">
-            音频、乐谱、图片、视频等多格式支持，所有作品资料请合规提交。
-          </div>
-        </template>
-      </el-upload>
+        :limit="6"
+        :readonly="readonly"
+        :upload-category="'instrumental'"
+        tip="音频、乐谱、图片、视频等多格式支持，所有作品资料请合规提交。"
+      />
     </el-card>
     <el-card shadow="never" class="ef-section-card sec-4">
       <template #header><div class="ef-card-title"><span>报名花名册</span></div></template>
@@ -169,7 +160,8 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { calculateTotalMemberCount, checkMemberLimit, getMemberLimitInfo } from '@/utils/memberLimit'
 import TeacherBlock from '@/components/TeacherBlock.vue'
 import MemberBlock from '@/components/MemberBlock.vue'
-import { InfoFilled, UploadFilled } from '@element-plus/icons-vue'
+import FileUploadBlock, { type FileItem as UploadFileItem } from '@/components/FileUploadBlock.vue'
+import { InfoFilled } from '@element-plus/icons-vue'
 import { commonRules } from '@/composables/useForm'
 import { registrationApi } from '@/services/api'
 
@@ -246,7 +238,8 @@ const baseForm = reactive<BaseForm>({
 })
 const intro = ref('')
 const accepts = '.mp3,.wav,.pdf,.jpg,.jpeg,.png'
-const fileList = ref<FileItem[]>([])
+const fileList = ref<UploadFileItem[]>([])
+const fileUploadRef = ref<InstanceType<typeof FileUploadBlock>>()
 
 const teachers = ref<RosterItem[]>([])
 const members = ref<RosterItem[]>([])
@@ -476,11 +469,34 @@ const onSubmit = async () => {
     return
   }
 
-  // 构建后端接口数据
-  // 注意：work_file 需要先上传文件获取URL，如果为空则使用默认值
-  const workFile = fileList.value.length > 0 && fileList.value[0]
-    ? (fileList.value[0].url || `https://example.com/path/to/your/file.${fileList.value[0].name.split('.').pop() || 'mp3'}`)
-    : 'https://example.com/path/to/your/file.mp3' // 默认文件URL
+  // 上传文件并获取URL（使用组件提供的方法）
+  let workFile = 'https://example.com/path/to/your/file.mp3' // 默认文件URL
+
+  if (fileList.value.length > 0) {
+    // 使用组件提供的方法获取第一个文件的URL
+    const firstFileUrl = fileUploadRef.value?.getFirstFileUrl()
+
+    if (firstFileUrl) {
+      // 如果文件已有URL（已上传），直接使用
+      workFile = firstFileUrl
+      console.log('[onSubmit] 使用已有文件URL:', workFile)
+    } else {
+      // 需要上传文件
+      console.log('[onSubmit] 开始上传文件...')
+      ElMessage.info('正在上传文件，请稍候...')
+
+      // 使用组件提供的方法上传所有文件
+      const uploadedUrls = await fileUploadRef.value?.uploadAllFiles()
+
+      if (uploadedUrls && uploadedUrls.length > 0 && uploadedUrls[0]) {
+        workFile = uploadedUrls[0] // 使用第一个文件的URL
+        console.log('[onSubmit] 文件上传成功，URL:', workFile)
+      } else {
+        ElMessage.error('文件上传失败，请重试')
+        return
+      }
+    }
+  }
 
   // 严格按照后端接口要求的字段格式构建数据
   const apiData = {
