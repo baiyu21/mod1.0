@@ -1,10 +1,11 @@
 <script lang="ts" setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { InfoFilled } from '@element-plus/icons-vue'
 import RosterBlock from '@/components/RosterBlock.vue'
 import FileUploadBlock from '@/components/FileUploadBlock.vue'
 import { commonRules } from '@/composables/useForm'
+import { registrationApi } from '@/services/api'
 
 interface BaseForm {
   title: string
@@ -43,6 +44,7 @@ interface FileItem {
 }
 
 const fileList = ref<FileItem[]>([])
+const fileUploadRef = ref<InstanceType<typeof FileUploadBlock>>()
 const accepts = '.jpg,.jpeg,.png,.pdf'
 
 // 作者信息表格
@@ -59,6 +61,7 @@ type RosterItem = Record<string, string | number | null>
 const authorColumns: Column[] = [
   { prop: 'name', label: '作者姓名', width: 120 },
   { prop: 'idNo', label: '身份证号', width: 200 },
+  { prop: 'gender', label: '性别', width: 100, type: 'select', options: [{ label: '男', value: 'male' }, { label: '女', value: 'female' }] },
   { prop: 'region', label: '所在地区', width: 140 },
   { prop: 'school', label: '学校名称', width: 160 },
   { prop: 'dept', label: '所在院系', width: 180 },
@@ -77,6 +80,47 @@ const formRules: FormRules = {
   phone: commonRules.phone,
   address: commonRules.address,
   tutor: commonRules.contactName
+}
+
+const props = defineProps<{ readonly?: boolean }>()
+const readonly = computed(() => props.readonly ?? false)
+
+// 组别映射
+const mapGroupType = (group: string) => {
+  const map: Record<string, string> = {
+    group1: 'amateur',
+    group2: 'professional'
+  }
+  return map[group] || 'amateur'
+}
+
+// 作品形式映射
+const mapArtForm = (formType: string) => {
+  const map: Record<string, string> = {
+    'chinese-painting': 'chinese_painting',
+    'watercolor': 'watercolor',
+    'oil-painting': 'oil_painting',
+    'other': 'other'
+  }
+  return map[formType] || formType
+}
+
+// 转换作者数据
+const transformAuthors = (rows: RosterItem[]) => {
+  return rows
+    .filter(row => row.name && String(row.name).trim())
+    .map(row => ({
+      name: String(row.name || '').trim(),
+      id_card_number: String(row.idNo || '').trim() || '000000000000000000',
+      gender: row.gender === 'male' ? 'male' : (row.gender === 'female' ? 'female' : 'male'),
+      region: String(row.region || '').trim() || '未填写',
+      school_name: String(row.school || '').trim() || '未填写',
+      department: String(row.dept || '').trim() || '未填写',
+      major_category: String(row.majorType || '').trim() || '艺术类',
+      major_name: String(row.major || '').trim() || '绘画专业',
+      student_id: String(row.studentNo || '').trim() || '20200001',
+      phone: String(row.phone || '').trim() || '13800000000'
+    }))
 }
 
 // 暂存功能
@@ -106,18 +150,80 @@ const onSubmit = async () => {
 
   // 表单验证
   if (!formRef.value) return
-  await formRef.value.validate((valid) => {
-    if (!valid) {
-      ElMessage.warning('请填写完整的表单信息')
-      return
-    }
-  }).catch(() => {
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) {
     ElMessage.warning('请填写完整的表单信息')
     return
-  })
+  }
 
-  // TODO: 实现提交逻辑
-  ElMessage.success('提交成功')
+  const authorData = transformAuthors(authors.value)
+  if (authorData.length === 0) {
+    ElMessage.warning('请至少添加一位作者')
+    return
+  }
+
+  // 上传文件
+  let workPhoto = 'https://example.com/sample_painting.jpg'
+  if (fileList.value.length > 0) {
+    const firstFileUrl = fileUploadRef.value?.getFirstFileUrl()
+    if (firstFileUrl) {
+      workPhoto = firstFileUrl
+    } else {
+      ElMessage.info('正在上传文件，请稍候...')
+      const uploadedUrls = await fileUploadRef.value?.uploadAllFiles()
+      if (uploadedUrls && uploadedUrls.length > 0 && uploadedUrls[0]) {
+        workPhoto = uploadedUrls[0]
+      } else {
+        ElMessage.error('文件上传失败，请重试')
+        return
+      }
+    }
+  }
+
+  const apiData = {
+    work_title: baseForm.title || '',
+    instructor_name: baseForm.tutor || '',
+    contact_name: baseForm.contact || '',
+    contact_phone: baseForm.phone || '',
+    contact_address: baseForm.address || '',
+    work_length: Number(baseForm.length) || 0,
+    work_width: Number(baseForm.width) || 0,
+    creation_date: baseForm.createAt || '',
+    art_form: mapArtForm(baseForm.formType) || 'chinese_painting',
+    group_type: mapGroupType(baseForm.group),
+    work_photo: workPhoto,
+    author_biography: authorIntro.value || '',
+    creation_description: creationIntro.value || '',
+    is_draft: false,
+    authors: authorData
+  }
+
+  try {
+    console.log('[PaintingSubmit] payload:', JSON.stringify(apiData, null, 2))
+    const success = await registrationApi.submitPainting(apiData)
+    if (success) {
+      ElMessage.success('提交成功')
+      const submitData = {
+        base: { ...baseForm },
+        authorIntro: authorIntro.value,
+        creationIntro: creationIntro.value,
+        files: fileList.value,
+        authors: authors.value,
+        submitTime: new Date().toLocaleString('zh-CN'),
+        status: '待审核'
+      }
+      try {
+        localStorage.setItem('paintingFormDraft', JSON.stringify(submitData))
+      } catch (error) {
+        console.error('保存本地记录失败:', error)
+      }
+    } else {
+      ElMessage.error('提交失败，请重试')
+    }
+  } catch (error) {
+    console.error('提交失败:', error)
+    ElMessage.error('提交失败，请稍后再试')
+  }
 }
 </script>
 
@@ -253,9 +359,12 @@ const onSubmit = async () => {
       <template #header><div class="ef-card-title"><span>上传作品</span></div></template>
       <div class="ef-sec-watermark">3</div>
       <FileUploadBlock
+        ref="fileUploadRef"
         v-model="fileList"
         :accept="accepts"
         :limit="6"
+        :readonly="readonly"
+        upload-category="painting"
         tip="支持 jpg/png/pdf，建议单张≥2000px。"
         upload-text="拖拽到此处或 <em>点击上传</em>"
       />

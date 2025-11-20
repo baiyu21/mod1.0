@@ -7,6 +7,7 @@ type UserRole = 'user' | 'approval' | 'admin' | 'logaudit'
 const USER_ID_KEY = 'user_id'
 const USER_ROLE_KEY = 'user_role'
 const USER_TOKEN_KEY = 'user_token'
+const USER_REFRESH_TOKEN_KEY = 'user_refresh_token'
 const USER_PERMISSIONS_KEY = 'user_permissions'
 
 // 获取用户ID
@@ -40,6 +41,16 @@ export function setUserToken(token: string): void {
   localStorage.setItem(USER_TOKEN_KEY, token)
 }
 
+// 获取刷新令牌
+export function getRefreshToken(): string | null {
+  return localStorage.getItem(USER_REFRESH_TOKEN_KEY)
+}
+
+// 设置刷新令牌
+export function setRefreshToken(refreshToken: string): void {
+  localStorage.setItem(USER_REFRESH_TOKEN_KEY, refreshToken)
+}
+
 // 获取用户权限
 export function getUserPermissions(): string[] {
   const permissions = localStorage.getItem(USER_PERMISSIONS_KEY)
@@ -56,6 +67,7 @@ export function clearUserStorage(): void {
   localStorage.removeItem(USER_ID_KEY)
   localStorage.removeItem(USER_ROLE_KEY)
   localStorage.removeItem(USER_TOKEN_KEY)
+  localStorage.removeItem(USER_REFRESH_TOKEN_KEY)
   localStorage.removeItem(USER_PERMISSIONS_KEY)
 }
 

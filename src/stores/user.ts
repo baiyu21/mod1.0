@@ -7,6 +7,8 @@ import {
   setUserRole,
   getUserToken,
   setUserToken,
+  getRefreshToken,
+  setRefreshToken,
   getUserPermissions,
   setUserPermissions,
   clearUserStorage
@@ -16,6 +18,7 @@ interface UserState {
   userId: string | null
   role: UserRole | null
   token: string | null
+  refreshToken: string | null
   permissions: string[]
 }
 
@@ -24,19 +27,24 @@ export const useUserStore = defineStore('user', {
     userId: getUserId(),
     role: getUserRole(),
     token: getUserToken(),
+    refreshToken: getRefreshToken(),
     permissions: getUserPermissions()
   }),
 
   actions: {
-    login(payload: { userId: string; role: UserRole; token?: string; permissions?: string[] }) {
+    login(payload: { userId: string; role: UserRole; token?: string; refreshToken?: string; permissions?: string[] }) {
       this.userId = payload.userId
       this.role = payload.role
       this.token = payload.token ?? 'mock-token'
+      this.refreshToken = payload.refreshToken ?? null
       this.permissions = payload.permissions ?? []
 
       setUserId(payload.userId)
       setUserRole(payload.role)
       setUserToken(this.token)
+      if (this.refreshToken) {
+        setRefreshToken(this.refreshToken)
+      }
       setUserPermissions(this.permissions)
     },
 
@@ -44,6 +52,7 @@ export const useUserStore = defineStore('user', {
       this.userId = null
       this.role = null
       this.token = null
+      this.refreshToken = null
       this.permissions = []
 
       clearUserStorage()

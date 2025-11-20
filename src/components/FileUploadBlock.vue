@@ -193,18 +193,17 @@ const handleUpload = async (options: UploadRequestOptions) => {
     uploadingFiles.value.add(fileKey)
     hideSuccess()
 
-    // 显示上传进度（可选）
+    // 显示初始上传进度
     if (onProgress) {
-      // 创建一个简单的进度事件对象
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const progressEvent: any = {
-        percent: 10,
+      const initialProgress: any = {
+        percent: 0,
         lengthComputable: true,
-        loaded: file.size * 0.1,
+        loaded: 0,
         total: file.size,
         target: {} as XMLHttpRequest
       }
-      onProgress(progressEvent)
+      onProgress(initialProgress)
     }
     console.log('[FileUploadBlock] 开始上传文件:', {
       fileName: file.name,
@@ -216,6 +215,19 @@ const handleUpload = async (options: UploadRequestOptions) => {
     const uploadedUrl = await uploadApi.uploadFile(file as File, props.uploadCategory)
 
     if (uploadedUrl) {
+      // 上传成功，先将进度条更新到100%
+      if (onProgress) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const completeProgress: any = {
+          percent: 100,
+          lengthComputable: true,
+          loaded: file.size,
+          total: file.size,
+          target: {} as XMLHttpRequest
+        }
+        onProgress(completeProgress)
+      }
+
       // 上传成功
       console.log('[FileUploadBlock] 文件上传成功，URL:', uploadedUrl)
 
@@ -231,6 +243,8 @@ const handleUpload = async (options: UploadRequestOptions) => {
         ;(currentFile as any).url = uploadedUrl
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ;(currentFile as any).status = 'success'
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(currentFile as any).percentage = 100
       }
 
       // 触发上传成功事件
@@ -403,11 +417,13 @@ const uploadSingleFile = async (file: File, fileItem: UploadFiles[number]) => {
         }
       })
 
-      // 更新文件列表中的 URL
+      // 更新文件列表中的 URL 和状态
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(fileItem as any).url = uploadedUrl
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(fileItem as any).status = 'success'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(fileItem as any).percentage = 100
 
       // 触发上传成功事件
       emit('upload-success', file, uploadedUrl)
@@ -501,6 +517,8 @@ const uploadAllFiles = async (): Promise<string[]> => {
           ;(currentFile as any).url = uploadedUrl
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ;(currentFile as any).status = 'success'
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(currentFile as any).percentage = 100
         }
 
         return uploadedUrl

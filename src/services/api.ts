@@ -17,6 +17,7 @@ export interface LoginResponse {
   userId: string
   role: UserRole
   token: string
+  refreshToken?: string
   name?: string
   phone?: string
 }
@@ -114,11 +115,15 @@ export const authApi = {
         // 或者使用 account 作为 userId
         const userId = loginData.user_id || loginData.userId || account
 
+        // 获取 refresh token
+        const refreshToken = loginData.refresh || loginData.refreshToken || loginData.refresh_token
+
         // 构建登录结果
         const result: LoginResponse = {
           userId: userId,
           role: loginData.role || mapAccountToRole(account), // 如果后端不返回 role，根据账号映射
           token: accessToken,
+          refreshToken: refreshToken, // 保存 refresh token
           name: loginData.name || loginData.username || '',
           phone: loginData.phone || loginData.telephone || ''
         }
@@ -136,34 +141,94 @@ export const authApi = {
 
   /**
    * 修改密码
-   * @param userId 用户ID
+   * @param userId 用户ID（不需要传入，从 token 中获取）
    * @param params 修改密码参数
    * @returns 是否修改成功
    */
   changePassword: async (userId: string, params: ChangePasswordParams): Promise<boolean> => {
     try {
-      const response = await post<{ success: boolean }>(`${API_BASE}/change-password/`, {
-        userId,
-        ...params
-      })
-      return response.data?.success || false
-    } catch (error) {
+      // 构建请求数据，使用后端要求的字段名
+      const requestData = {
+        old_password: params.oldPwd,
+        new_password: params.newPwd,
+        modifier_name: params.name, // 注意：字段名是 modifier_name，不是 name
+        modifier_contact: params.phone // 注意：字段名是 modifier_contact，不是 phone
+      }
+      console.log('[changePassword] 提交数据:', JSON.stringify(requestData, null, 2))
+
+      // 使用 POST 方法，接口路径：/api/change-password/
+      // 注意：不需要传入 user_id，用户ID从 token 中获取
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>(`${API_BASE}/change-password/`, requestData)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      console.log('[changePassword] 响应数据:', JSON.stringify(result, null, 2))
+
+      // 检查响应格式
+      if (result.code === 200 || result.success === true) {
+        return true
+      }
+      return false
+    } catch (error: unknown) {
       console.error('Change password error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+        console.error('错误请求数据:', axiosError.config?.data)
+      }
       return false
     }
   },
 
   /**
    * 登出
+   * @param refreshToken 刷新令牌（从登录时获取）
    * @returns 是否登出成功
    */
-  logout: async (): Promise<boolean> => {
+  logout: async (refreshToken?: string): Promise<boolean> => {
     try {
-      await post(`${API_BASE}/logout/`)
-      return true
-    } catch (error) {
-      console.error('Logout error:', error)
+      if (!refreshToken) {
+        console.warn('[logout] 未提供 refresh token，尝试从 localStorage 获取')
+        const { getRefreshToken } = await import('@/utils/storage')
+        const storedToken = getRefreshToken()
+        refreshToken = storedToken || undefined
+      }
+
+      if (!refreshToken) {
+        console.warn('[logout] 未找到 refresh token，直接返回成功')
+        return true
+      }
+
+      console.log('[logout] 提交数据:', JSON.stringify({ refresh: refreshToken }, null, 2))
+      // 使用 POST 方法，接口路径：/api/logout/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>(`${API_BASE}/logout/`, {
+        refresh: refreshToken
+      })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      console.log('[logout] 响应数据:', JSON.stringify(result, null, 2))
+
+      // 检查响应格式
+      if (result.code === 200 || result.success === true) {
+        return true
+      }
       return false
+    } catch (error: unknown) {
+      console.error('Logout error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+        console.error('错误请求数据:', axiosError.config?.data)
+      }
+      // 即使接口调用失败，也返回 true，确保前端可以正常登出
+      return true
     }
   }
 }
@@ -253,51 +318,21 @@ export const uploadApi = {
       return null
     }
 
-    const endpointOverrides: Record<string, string[]> = {
-      calligraphy: [`${API_BASE}/calligraphy/calligraphy-upload/`]
-    }
+    // 统一使用 /api/vocal/upload/ 作为所有类别的上传接口
+    const uploadUrl = `${API_BASE}/vocal/upload/`
 
-    const defaultCandidates = [
-      `${API_BASE}/${category}/upload/`,
-      `${API_BASE}/upload/`
-    ]
-    const categoryCandidates = endpointOverrides[category] || []
-    const candidateUrls = Array.from(new Set([...categoryCandidates, ...defaultCandidates]))
-
-    let lastError: unknown = null
-
-    for (const targetUrl of candidateUrls) {
-      try {
-        const result = await requestUpload(targetUrl)
-        if (result) {
-          return result
-        }
-        console.warn(`[uploadFile] 接口 ${targetUrl} 未返回有效 URL，尝试下一个候选`)
-      } catch (error: unknown) {
-        lastError = error
-        const status =
-          error &&
-          typeof error === 'object' &&
-          'response' in error
-            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (error as any).response?.status
-            : undefined
-
-        if (status === 404) {
-          console.warn(`[uploadFile] 接口 ${targetUrl} 返回 404，尝试下一个候选`)
-          continue
-        }
-
-        console.error('[uploadFile] 上传失败:', error)
-        return null
+    try {
+      const result = await requestUpload(uploadUrl)
+      if (result) {
+        return result
       }
+      ElMessage.error('文件上传失败：服务器未返回有效URL')
+      return null
+    } catch (error: unknown) {
+      console.error('[uploadFile] 上传失败:', error)
+      // 错误已经在 requestUpload 中处理并显示，这里只需要返回 null
+      return null
     }
-
-    if (lastError) {
-      console.error('[uploadFile] 所有上传候选均失败，最后错误:', lastError)
-    }
-    ElMessage.error('文件上传失败：服务器未提供有效上传接口')
-    return null
   }
 }
 
@@ -459,6 +494,166 @@ export const registrationApi = {
       return false
     } catch (error: unknown) {
       console.error('Submit opera registration error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+        console.error('错误请求数据:', axiosError.config?.data)
+      }
+      return false
+    }
+  },
+
+  /**
+   * 提交绘画作品报名
+   * @param data 绘画表单数据
+   * @returns 是否提交成功
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  submitPainting: async (data: any): Promise<boolean> => {
+    try {
+      console.log('[submitPainting] 提交数据:', JSON.stringify(data, null, 2))
+      // 注意：绘画接口路径是 /painting/api/registrations/，不是 /api/painting/registrations/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>('/painting/api/registrations/', data)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      if (result.code === 200 || result.success === true) {
+        return true
+      }
+      return false
+    } catch (error: unknown) {
+      console.error('Submit painting registration error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+        console.error('错误请求数据:', axiosError.config?.data)
+      }
+      return false
+    }
+  },
+
+  /**
+   * 提交声乐报名
+   * @param data 声乐报名数据
+   * @returns 是否提交成功
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  submitVocal: async (data: any): Promise<boolean> => {
+    try {
+      console.log('[submitVocal] 提交数据:', JSON.stringify(data, null, 2))
+      // 注意：声乐接口路径是 /api/vocal/api/registrations/（有两个api）
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>(`${API_BASE}/vocal/api/registrations/`, data)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      if (result.code === 200 || result.success === true) {
+        return true
+      }
+      return false
+    } catch (error: unknown) {
+      console.error('Submit vocal registration error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+        console.error('错误请求数据:', axiosError.config?.data)
+      }
+      return false
+    }
+  },
+
+  /**
+   * 提交设计作品报名
+   * @param data 设计作品表单数据
+   * @returns 是否提交成功
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  submitDesign: async (data: any): Promise<boolean> => {
+    try {
+      console.log('[submitDesign] 提交数据:', JSON.stringify(data, null, 2))
+      // 注意：设计接口路径是 /design/api/registrations/，不是 /api/design/registrations/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>('/design/api/registrations/', data)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      if (result.code === 200 || result.success === true) {
+        return true
+      }
+      return false
+    } catch (error: unknown) {
+      console.error('Submit design registration error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+        console.error('错误请求数据:', axiosError.config?.data)
+      }
+      return false
+    }
+  },
+
+  /**
+   * 提交摄影作品报名
+   * @param data 摄影作品表单数据
+   * @returns 是否提交成功
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  submitPhotography: async (data: any): Promise<boolean> => {
+    try {
+      console.log('[submitPhotography] 提交数据:', JSON.stringify(data, null, 2))
+      // 注意：摄影接口路径是 /photography/api/photography-registrations/，不是 /api/photography/registrations/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>('/photography/api/photography-registrations/', data)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      if (result.code === 200 || result.success === true) {
+        return true
+      }
+      return false
+    } catch (error: unknown) {
+      console.error('Submit photography registration error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+        console.error('错误请求数据:', axiosError.config?.data)
+      }
+      return false
+    }
+  },
+
+  /**
+   * 提交微电影作品报名
+   * @param data 微电影作品表单数据
+   * @returns 是否提交成功
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  submitMicrofilm: async (data: any): Promise<boolean> => {
+    try {
+      console.log('[submitMicrofilm] 提交数据:', JSON.stringify(data, null, 2))
+      // 注意：微电影接口路径是 /micro-film/api/registrations/，不是 /api/micro-film/registrations/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>('/micro-film/api/registrations/', data)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      if (result.code === 200 || result.success === true) {
+        return true
+      }
+      return false
+    } catch (error: unknown) {
+      console.error('Submit microfilm registration error:', error)
       if (error && typeof error === 'object' && 'response' in error) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const axiosError = error as any

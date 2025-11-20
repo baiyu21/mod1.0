@@ -296,6 +296,51 @@ const normalizeEthnicity = (value?: string) => {
   return nation === '汉' ? '汉族' : nation
 }
 
+// 性别映射：前端值 → 后端中文值
+const mapGender = (gender?: string): string => {
+  if (gender === 'female') return '女'
+  if (gender === 'male') return '男'
+  return '男' // 默认值
+}
+
+// 年级映射：前端值 → 后端中文值
+const mapGrade = (grade?: string): string => {
+  const gradeMap: Record<string, string> = {
+    'freshman': '大一',
+    'sophomore': '大二',
+    'junior': '大三',
+    'senior': '大四',
+    'grade5': '大五',
+    'grade6': '大六',
+    'grade7': '大七',
+    'grade8': '大八',
+    'master1': '研一',
+    'master2': '研二',
+    'master3': '研三',
+    'master4': '研四',
+    'phd1': '博一',
+    'phd2': '博二',
+    'phd3': '博三'
+  }
+  // 如果已经是中文格式，直接返回
+  if (grade && !gradeMap[grade]) {
+    return grade
+  }
+  return gradeMap[grade || ''] || '大二'
+}
+
+// 专业类别映射：前端值 → 后端中文值
+const mapMajorCategory = (major?: string): string => {
+  if (major === 'art') return '艺术类'
+  if (major === 'non-art') return '非艺术类'
+  // 如果已经是中文格式，直接返回
+  if (major && (major === '艺术类' || major === '非艺术类')) {
+    return major
+  }
+  return '艺术类' // 默认值
+}
+
+// 转换指导教师数据（role: "instructor"）
 const transformGuideTeachers = (rows: RosterItem[]) => {
   return rows
     .filter(item => item.name && String(item.name).trim())
@@ -304,14 +349,34 @@ const transformGuideTeachers = (rows: RosterItem[]) => {
       id_card_number: String(item.idNo || '').trim() || '000000000000000000',
       ethnicity: normalizeEthnicity(item.nation),
       age: Number(item.age) || 35,
-      gender: item.gender === 'female' ? 'female' : 'male',
+      gender: mapGender(item.gender), // 转换为中文：'男' 或 '女'
       region: String(item.region || '').trim() || '北京市',
       school_name: String(item.school || '').trim() || '未填写',
       department: String(item.org || item.dept || '').trim() || '未填写',
-      phone: String(item.phone || '').trim() || '13800000000'
+      phone: String(item.phone || '').trim() || '13800000000',
+      role: 'instructor' // 指导老师
     }))
 }
 
+// 转换老师伴奏数据（role: "accompanist"）
+const transformTeacherAccompanists = (rows: RosterItem[]) => {
+  return rows
+    .filter(item => item.name && String(item.name).trim())
+    .map(item => ({
+      name: String(item.name || '').trim(),
+      id_card_number: String(item.idNo || '').trim() || '000000000000000000',
+      ethnicity: normalizeEthnicity(item.nation),
+      age: Number(item.age) || 35,
+      gender: mapGender(item.gender), // 转换为中文：'男' 或 '女'
+      region: String(item.region || '').trim() || '北京市',
+      school_name: String(item.school || '').trim() || '未填写',
+      department: String(item.org || item.dept || '').trim() || '未填写',
+      phone: String(item.phone || '').trim() || '13800000000',
+      role: 'accompanist' // 伴奏老师
+    }))
+}
+
+// 转换参演学生数据（role: "performer"）
 const transformParticipants = (rows: RosterItem[]) => {
   return rows
     .filter(item => item.name && String(item.name).trim())
@@ -320,15 +385,38 @@ const transformParticipants = (rows: RosterItem[]) => {
       id_card_number: String(item.idNo || '').trim() || '000000000000000000',
       ethnicity: normalizeEthnicity(item.nation),
       age: Number(item.age) || 20,
-      gender: item.gender === 'female' ? 'female' : 'male',
+      gender: mapGender(item.gender), // 转换为中文：'男' 或 '女'
       region: String(item.region || '').trim() || '北京市',
       school_name: String(item.school || '').trim() || '未填写',
       department: String(item.dept || '').trim() || '未填写',
-      grade: String(item.grade || '').trim() || '大二',
-      major_category: String(item.major || '').trim() || '艺术类',
+      grade: mapGrade(item.grade), // 转换为中文：'大一'、'大二' 等
+      major_category: mapMajorCategory(item.major), // 转换为中文：'艺术类' 或 '非艺术类'
       major_name: String(item.majorName || item.major || '').trim() || '表演',
       student_id: String(item.studentId || item.studentNo || '').trim() || '20200001',
-      phone: String(item.phone || '').trim() || '13800000000'
+      phone: String(item.phone || '').trim() || '13800000000',
+      role: 'performer' // 参演学生
+    }))
+}
+
+// 转换学生伴奏数据（role: "accompanist"）
+const transformStudentAccompanists = (rows: RosterItem[]) => {
+  return rows
+    .filter(item => item.name && String(item.name).trim())
+    .map(item => ({
+      name: String(item.name || '').trim(),
+      id_card_number: String(item.idNo || '').trim() || '000000000000000000',
+      ethnicity: normalizeEthnicity(item.nation),
+      age: Number(item.age) || 20,
+      gender: mapGender(item.gender), // 转换为中文：'男' 或 '女'
+      region: String(item.region || '').trim() || '北京市',
+      school_name: String(item.school || '').trim() || '未填写',
+      department: String(item.dept || '').trim() || '未填写',
+      grade: mapGrade(item.grade), // 转换为中文：'大一'、'大二' 等
+      major_category: mapMajorCategory(item.major), // 转换为中文：'艺术类' 或 '非艺术类'
+      major_name: String(item.majorName || item.major || '').trim() || '表演',
+      student_id: String(item.studentId || item.studentNo || '').trim() || '20200001',
+      phone: String(item.phone || '').trim() || '13800000000',
+      role: 'accompanist' // 学生伴奏
     }))
 }
 
@@ -377,10 +465,17 @@ const onSubmit = async () => {
     return
   }
 
+  // 转换并合并指导教师和老师伴奏到 guide_teachers
   const guideTeachersData = transformGuideTeachers(teachers.value)
-  const participantsData = transformParticipants(members.value)
+  const teacherAccompanistsData = transformTeacherAccompanists(teacherAccomp.value)
+  const allGuideTeachers = [...guideTeachersData, ...teacherAccompanistsData]
 
-  if (participantsData.length === 0) {
+  // 转换并合并参演学生和学生伴奏到 participants
+  const participantsData = transformParticipants(members.value)
+  const studentAccompanistsData = transformStudentAccompanists(studentAccomp.value)
+  const allParticipants = [...participantsData, ...studentAccompanistsData]
+
+  if (allParticipants.length === 0) {
     ElMessage.warning('请至少添加一个参赛人员')
     return
   }
@@ -408,7 +503,7 @@ const onSubmit = async () => {
     performance_type: mapPerformanceType(baseForm.performanceType),
     duration_minutes: baseForm.minutes || 0,
     duration_seconds: baseForm.seconds || 0,
-    performer_count: baseForm.count || members.value.length || 1,
+    performer_count: baseForm.count || allParticipants.length || 1,
     contact_name: baseForm.contact || '',
     contact_phone: baseForm.phone || '',
     contact_address: baseForm.address || '',
@@ -416,8 +511,8 @@ const onSubmit = async () => {
     is_original: baseForm.isOriginal || false,
     work_description: intro.value || '',
     status: 'draft',
-    guide_teachers: guideTeachersData,
-    participants: participantsData
+    guide_teachers: allGuideTeachers, // 包含指导教师（role: "instructor"）和老师伴奏（role: "accompanist"）
+    participants: allParticipants // 包含参演学生（role: "performer"）和学生伴奏（role: "accompanist"）
   }
 
   try {

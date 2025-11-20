@@ -58,7 +58,8 @@ export function useAuth() {
         userStore.login({
           userId: authResult.userId || form.username,
           role: authResult.role,
-          token: authResult.token
+          token: authResult.token,
+          refreshToken: authResult.refreshToken // 保存 refresh token
         })
         ElMessage.success('登录成功')
 
@@ -94,10 +95,23 @@ export function useAuth() {
   /**
    * 登出
    */
-  const logout = () => {
-    userStore.logout()
-    router.replace('/login')
-    ElMessage.success('已退出登录')
+  const logout = async () => {
+    try {
+      // 在清空 store 之前获取 refreshToken
+      const refreshToken = userStore.refreshToken
+      
+      // 调用登出接口
+      const { authApi } = await import('@/services/api')
+      await authApi.logout(refreshToken || undefined)
+    } catch (error) {
+      console.error('Logout API error:', error)
+      // 即使接口调用失败，也继续执行登出流程
+    } finally {
+      // 清空用户信息和存储
+      userStore.logout()
+      router.replace('/login')
+      ElMessage.success('已退出登录')
+    }
   }
 
   /**

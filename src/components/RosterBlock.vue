@@ -101,6 +101,9 @@ const emit = defineEmits<{
 const uploadRef = ref()
 const rowsLocal = ref<RosterItem[]>(props.rows ? JSON.parse(JSON.stringify(props.rows)) : [])
 
+// 同步标志，防止循环更新（必须在 watch 之前定义）
+let isSyncing = false
+
 watch(() => props.rows, (v) => {
   if (isSyncing) return // 如果正在同步，忽略外部更新，避免循环
   // 只有在 props.rows 真正改变时才更新（避免循环更新）
@@ -109,20 +112,27 @@ watch(() => props.rows, (v) => {
   const currentStr = JSON.stringify(rowsLocal.value)
   const newStr = JSON.stringify(newRows)
   if (currentStr !== newStr) {
+    isSyncing = true // 临时设置标志，防止触发 rowsLocal 的 watch
     rowsLocal.value = newRows
     reseq()
+    // 延迟重置同步标志，确保同步完成
+    nextTick(() => {
+      isSyncing = false
+    })
   }
 }, { deep: true })
 
 // 监听 rowsLocal 的变化，自动同步到父组件
 // 使用 immediate: false 和 flush: 'post' 避免循环更新
-let isSyncing = false
 watch(rowsLocal, () => {
   if (isSyncing) return // 防止循环更新
   // 立即同步，不延迟
   isSyncing = true
   sync()
-  isSyncing = false
+  // 延迟重置同步标志，确保同步完成
+  nextTick(() => {
+    isSyncing = false
+  })
 }, { deep: true, flush: 'post' })
 
 const reseq = () => rowsLocal.value.forEach((r, i) => (r._seq = i + 1))
