@@ -1,7 +1,18 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Download, Upload } from '@element-plus/icons-vue'
+import { reviewApi } from '@/services/api'
+
+// 后端返回的用户统计数据
+interface UserStat {
+  account: string
+  username: string
+  total_count: number
+  approved_count: number
+  rejected_count: number
+  pending_count: number
+}
 
 // 按大学统计的数据
 type UniversityStats = {
@@ -15,57 +26,40 @@ type UniversityStats = {
   status: '已通过' | '已驳回' | '待审核'  // 整体状态
 }
 
+const loading = ref(false)
+const userStats = ref<UserStat[]>([])
+
 // 根据审核逻辑：一个大学通过就是整体所有通过，驳回就是整体所有驳回
 // 所以根据状态来计算各数量
 const universityStats = computed(() => {
-  // 这里应该从实际的报名数据中统计，暂时使用示例数据
-  // 实际应该从 ApprovalPage 或 API 获取数据
-  const rawData = [
-    {
-      university: 'A大学',
-      accountId: 'account001',
-      total: 45,
-      status: '已通过' as const,
-    },
-    {
-      university: 'B大学',
-      accountId: 'account002',
-      total: 32,
-      status: '已驳回' as const,
-      rejectReason: '报名材料不完整，缺少必要文件',
-    },
-    {
-      university: 'C大学',
-      accountId: 'account003',
-      total: 28,
-      status: '待审核' as const,
-    },
-    {
-      university: 'D大学',
-      accountId: 'account004',
-      total: 55,
-      status: '已通过' as const,
-    },
-    {
-      university: 'E大学',
-      accountId: 'account005',
-      total: 38,
-      status: '已驳回' as const,
-      rejectReason: '提交材料不符合要求，请重新提交',
-    },
-  ]
+  // 从后端接口获取的数据转换为前端显示格式
+  return userStats.value.map(item => {
+    // 根据统计数据判断整体状态
+    // 如果全部通过，状态为"已通过"
+    // 如果有驳回，状态为"已驳回"
+    // 如果有待审核，状态为"待审核"
+    let status: '已通过' | '已驳回' | '待审核'
+    if (item.pending_count > 0) {
+      status = '待审核'
+    } else if (item.rejected_count > 0) {
+      status = '已驳回'
+    } else if (item.approved_count > 0 && item.rejected_count === 0 && item.pending_count === 0) {
+      status = '已通过'
+    } else {
+      status = '待审核' // 默认状态
+    }
 
-  return rawData.map(item => ({
-    university: item.university,
-    accountId: item.accountId,
-    total: item.total,
-    // 根据状态计算：通过就是全部通过，驳回就是全部驳回，待审核就是全部待审核
-    passed: item.status === '已通过' ? item.total : 0,
-    rejected: item.status === '已驳回' ? item.total : 0,
-    pending: item.status === '待审核' ? item.total : 0,
-    status: item.status,
-    rejectReason: item.rejectReason,
-  }))
+    return {
+      university: item.username || item.account, // username 对应大学名字，如果没有则显示账号
+      accountId: item.account, // account 对应账号
+      total: item.total_count,
+      passed: item.approved_count,
+      rejected: item.rejected_count,
+      pending: item.pending_count,
+      status,
+      rejectReason: item.rejected_count > 0 ? '部分报名被驳回' : undefined, // 可以根据实际情况设置驳回理由
+    }
+  })
 })
 
 // 整体统计数据
@@ -243,6 +237,27 @@ function submitStampedForm() {
   // TODO: 实现提交逻辑
 }
 
+// 加载用户统计数据
+const loadUserStats = async () => {
+  loading.value = true
+  try {
+    console.log('[IndexPage] 开始加载用户统计数据')
+    const data = await reviewApi.getUserStats()
+    console.log('[IndexPage] 获取到的用户统计数据:', data)
+    userStats.value = data
+  } catch (error) {
+    console.error('[IndexPage] 加载用户统计数据失败:', error)
+    ElMessage.error('加载统计数据失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 组件挂载时加载数据
+onMounted(() => {
+  loadUserStats()
+})
+
 // 导出统计表
 function exportStatistics() {
   try {
@@ -299,7 +314,7 @@ function exportStatistics() {
         </div>
       </template>
 
-      <el-table :data="summaryTableData" border stripe>
+      <el-table :data="summaryTableData" border stripe v-loading="loading">
         <el-table-column prop="category" label="类别" min-width="120" />
         <el-table-column prop="total" label="总报名数" width="120" align="center" />
         <el-table-column prop="passed" label="已通过" width="120" align="center">
@@ -344,7 +359,7 @@ function exportStatistics() {
         <el-button type="primary">搜索</el-button>
       </div>
 
-      <el-table :data="filteredUniversities" border stripe>
+      <el-table :data="filteredUniversities" border stripe v-loading="loading">
         <el-table-column prop="university" label="大学名称" min-width="180" />
         <el-table-column prop="accountId" label="账号ID" min-width="140" />
         <el-table-column prop="total" label="总报名节目数" width="120" align="center" />

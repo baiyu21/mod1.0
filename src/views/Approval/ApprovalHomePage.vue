@@ -15,31 +15,17 @@
           <div class="stat-unit">条</div>
         </div>
         <div class="table-wrapper">
-          <div class="filter-section">
-            <el-select
-              v-model="regionFilter"
-              placeholder="请选择地区"
-              clearable
-              style="width: 200px"
-              @change="handleRegionFilterChange"
-            >
-              <el-option
-                v-for="region in regions"
-                :key="region"
-                :label="region"
-                :value="region"
-              />
-            </el-select>
-          </div>
+          <!-- 地区筛选功能暂时隐藏，因为后端接口未提供地区字段 -->
           <el-table
             :data="schoolTableData.total"
             border
             stripe
             size="small"
             style="width: 100%"
+            v-loading="loading"
           >
-            <el-table-column prop="school" label="学校名称" width="200" />
-            <el-table-column prop="region" label="所在地区" width="150" />
+            <el-table-column prop="account" label="账号" width="150" />
+            <el-table-column prop="school" label="大学名字" width="200" />
             <el-table-column prop="count" label="数量" width="100" align="center">
               <template #default="{ row }">
                 <span class="count-value">{{ row.count }}</span>
@@ -65,31 +51,17 @@
           <div class="stat-unit">条</div>
         </div>
         <div class="table-wrapper">
-          <div class="filter-section">
-            <el-select
-              v-model="regionFilter"
-              placeholder="请选择地区"
-              clearable
-              style="width: 200px"
-              @change="handleRegionFilterChange"
-            >
-              <el-option
-                v-for="region in regions"
-                :key="region"
-                :label="region"
-                :value="region"
-              />
-            </el-select>
-          </div>
+          <!-- 地区筛选功能暂时隐藏，因为后端接口未提供地区字段 -->
           <el-table
             :data="schoolTableData.unReviewed"
             border
             stripe
             size="small"
             style="width: 100%"
+            v-loading="loading"
           >
-            <el-table-column prop="school" label="学校名称" width="200" />
-            <el-table-column prop="region" label="所在地区" width="150" />
+            <el-table-column prop="account" label="账号" width="150" />
+            <el-table-column prop="school" label="大学名字" width="200" />
             <el-table-column prop="count" label="数量" width="100" align="center">
               <template #default="{ row }">
                 <span class="count-value un-reviewed">{{ row.count }}</span>
@@ -115,31 +87,17 @@
           <div class="stat-unit">条</div>
         </div>
         <div class="table-wrapper">
-          <div class="filter-section">
-            <el-select
-              v-model="regionFilter"
-              placeholder="请选择地区"
-              clearable
-              style="width: 200px"
-              @change="handleRegionFilterChange"
-            >
-              <el-option
-                v-for="region in regions"
-                :key="region"
-                :label="region"
-                :value="region"
-              />
-            </el-select>
-          </div>
+          <!-- 地区筛选功能暂时隐藏，因为后端接口未提供地区字段 -->
           <el-table
             :data="schoolTableData.pending"
             border
             stripe
             size="small"
             style="width: 100%"
+            v-loading="loading"
           >
-            <el-table-column prop="school" label="学校名称" width="200" />
-            <el-table-column prop="region" label="所在地区" width="150" />
+            <el-table-column prop="account" label="账号" width="150" />
+            <el-table-column prop="school" label="大学名字" width="200" />
             <el-table-column prop="count" label="数量" width="100" align="center">
               <template #default="{ row }">
                 <span class="count-value pending">{{ row.count }}</span>
@@ -165,31 +123,17 @@
           <div class="stat-unit">条</div>
         </div>
         <div class="table-wrapper">
-          <div class="filter-section">
-            <el-select
-              v-model="regionFilter"
-              placeholder="请选择地区"
-              clearable
-              style="width: 200px"
-              @change="handleRegionFilterChange"
-            >
-              <el-option
-                v-for="region in regions"
-                :key="region"
-                :label="region"
-                :value="region"
-              />
-            </el-select>
-          </div>
+          <!-- 地区筛选功能暂时隐藏，因为后端接口未提供地区字段 -->
           <el-table
             :data="schoolTableData.approved"
             border
             stripe
             size="small"
             style="width: 100%"
+            v-loading="loading"
           >
-            <el-table-column prop="school" label="学校名称" width="200" />
-            <el-table-column prop="region" label="所在地区" width="150" />
+            <el-table-column prop="account" label="账号" width="150" />
+            <el-table-column prop="school" label="大学名字" width="200" />
             <el-table-column prop="count" label="数量" width="100" align="center">
               <template #default="{ row }">
                 <span class="count-value approved">{{ row.count }}</span>
@@ -219,69 +163,80 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { DataAnalysis, Operation } from '@element-plus/icons-vue'
-import { getRegistrationStats, getAllRegions } from '@/services/mock'
+import { reviewApi } from '@/services/api'
 
 const router = useRouter()
-const regionFilter = ref<string>('')
-const regions = ref<string[]>([])
+// const regionFilter = ref<string>('') // 暂时不使用，因为后端接口不支持地区筛选
+// const regions = ref<string[]>([]) // 暂时不使用，因为后端接口未提供地区字段
+const loading = ref(false)
 
-const stats = ref({
-  total: 0,
-  unReviewed: 0,
-  pending: 0,
-  approved: 0,
-  bySchool: {} as Record<string, {
-    total: number
-    pending: number
-    approved: number
-    unReviewed: number
-    region: string
-  }>
+// 用户统计数据（从后端接口获取）
+interface UserStat {
+  account: string
+  username: string
+  total_count: number
+  approved_count: number
+  rejected_count: number
+  pending_count: number
+}
+
+const userStats = ref<UserStat[]>([])
+
+// 计算统计数据
+const stats = computed(() => {
+  const total = userStats.value.reduce((sum, item) => sum + item.total_count, 0)
+  const approved = userStats.value.reduce((sum, item) => sum + item.approved_count, 0)
+  const rejected = userStats.value.reduce((sum, item) => sum + item.rejected_count, 0)
+  const pending = userStats.value.reduce((sum, item) => sum + item.pending_count, 0)
+  const unReviewed = total - approved - rejected
+
+  return {
+    total,
+    unReviewed,
+    pending,
+    approved,
+    rejected
+  }
 })
 
-// 将学校统计数据转换为表格数据
+// 将用户统计数据转换为表格数据
 const schoolTableData = computed(() => {
-  const bySchool = stats.value.bySchool
+  // 目前后端接口不支持地区筛选，直接使用所有数据
+  const filteredData = userStats.value
 
-  const total = Object.keys(bySchool).map(school => {
-    const schoolStat = bySchool[school]
-    if (!schoolStat) return null
-    return {
-      school,
-      region: schoolStat.region,
-      count: schoolStat.total
-    }
-  }).filter((item): item is { school: string; region: string; count: number } => item !== null)
+  // 总报名表格数据（按账号/学校分组）
+  const total = filteredData.map(item => ({
+    account: item.account,
+    school: item.username || item.account, // username 对应大学名字，如果没有则显示账号
+    count: item.total_count
+  }))
 
-  const unReviewed = Object.keys(bySchool).map(school => {
-    const schoolStat = bySchool[school]
-    if (!schoolStat) return null
-    return {
-      school,
-      region: schoolStat.region,
-      count: schoolStat.unReviewed
-    }
-  }).filter((item): item is { school: string; region: string; count: number } => item !== null && item.count > 0)
+  // 未审核表格数据
+  const unReviewed = filteredData
+    .map(item => ({
+      account: item.account,
+      school: item.username || item.account,
+      count: item.total_count - item.approved_count - item.rejected_count
+    }))
+    .filter(item => item.count > 0)
 
-  const pending = Object.keys(bySchool).map(school => {
-    const schoolStat = bySchool[school]
-    if (!schoolStat) return null
-    return {
-      school,
-      region: schoolStat.region,
-      count: schoolStat.pending
-    }
-  }).filter((item): item is { school: string; region: string; count: number } => item !== null && item.count > 0)
+  // 待审核表格数据
+  const pending = filteredData
+    .map(item => ({
+      account: item.account,
+      school: item.username || item.account,
+      count: item.pending_count
+    }))
+    .filter(item => item.count > 0)
 
-  const approved = Object.keys(bySchool).map(school => {
-    const schoolStat = bySchool[school]
-    if (!schoolStat) return null
-    return {
-      school,
-      region: schoolStat.region,
-      count: schoolStat.approved
-    }
-  }).filter((item): item is { school: string; region: string; count: number } => item !== null && item.count > 0)
+  // 已审核表格数据
+  const approved = filteredData
+    .map(item => ({
+      account: item.account,
+      school: item.username || item.account,
+      count: item.approved_count + item.rejected_count
+    }))
+    .filter(item => item.count > 0)
 
   return {
     total,
@@ -293,19 +248,29 @@ const schoolTableData = computed(() => {
 
 // 加载统计数据
 const loadStats = async () => {
-  const data = await getRegistrationStats(regionFilter.value || undefined)
-  stats.value = data
+  loading.value = true
+  try {
+    const data = await reviewApi.getUserStats()
+    userStats.value = data
+    // 从数据中提取地区列表（如果后端有提供 region 字段）
+    // 目前后端没有提供 region 字段，暂时留空
+    // regions.value = [...new Set(data.map(item => item.region).filter(Boolean))]
+  } catch (error) {
+    console.error('加载统计数据失败:', error)
+  } finally {
+    loading.value = false
+  }
 }
 
-// 加载地区列表
-const loadRegions = async () => {
-  regions.value = getAllRegions()
-}
+// 加载地区列表（暂时不使用，因为后端接口未提供地区字段）
+// const loadRegions = async () => {
+//   regions.value = []
+// }
 
-// 地区筛选变化
-const handleRegionFilterChange = () => {
-  loadStats()
-}
+// 地区筛选变化（暂时不使用，因为后端接口不支持地区筛选）
+// const handleRegionFilterChange = () => {
+//   loadStats()
+// }
 
 // 跳转到待审核页面
 const goToPending = () => {
@@ -318,7 +283,7 @@ const goToReviewed = () => {
 }
 
 onMounted(() => {
-  loadRegions()
+  // loadRegions() // 暂时不使用
   loadStats()
 })
 </script>

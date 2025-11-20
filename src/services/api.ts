@@ -770,6 +770,44 @@ export const logApi = {
 }
 
 /**
+ * 审核相关接口
+ */
+export const reviewApi = {
+  /**
+   * 获取用户统计数据
+   * @returns 用户统计数据列表
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getUserStats: async (): Promise<any[]> => {
+    try {
+      console.log('[getUserStats] 请求用户统计数据')
+      // 接口路径：/api/review/api/user-stats/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await get<any>(`${API_BASE}/review/api/user-stats/`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      console.log('[getUserStats] 响应数据:', JSON.stringify(result, null, 2))
+
+      // 检查响应格式
+      if (result.success === true && Array.isArray(result.data)) {
+        return result.data
+      }
+      return []
+    } catch (error: unknown) {
+      console.error('Get user stats error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+      }
+      return []
+    }
+  }
+}
+
+/**
  * 审计相关接口
  */
 export const auditApi = {

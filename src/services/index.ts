@@ -70,5 +70,5 @@ export const changePassword = async (
 export * from './mock'
 
 // 导出真实接口（供需要直接调用真实接口的场景使用）
-export { authApi, registrationApi, logApi, auditApi, accountApi } from './api'
+export { authApi, registrationApi, logApi, auditApi, accountApi, reviewApi } from './api'
 

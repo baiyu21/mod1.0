@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { reviewApi } from '@/services/api'
 
 type Registration = {
   id: string
@@ -55,6 +56,7 @@ const keyword = ref('')
 const filterStatus = ref<string>('')
 const filterType = ref<string>('')
 const multipleSelection = ref<Registration[]>([])
+const loading = ref(false)
 
 // 节目类型选项（用户端的12个类型）
 const typeOptions = [
@@ -79,171 +81,111 @@ const currentRejectAccount = ref<string | null>(null)  // 当前要驳回的节�
 const batchRejectReasonDialogVisible = ref(false)
 const batchRejectReason = ref('')
 
-const list = ref<Registration[]>([
-  {
-    id: '1',
-    accountId: 'account001',
-    accountName: 'A大学',
-    workName: '春天来了',
-    name: '张三',
-    school: 'A大学',
+const list = ref<Registration[]>([])
+// 后端数据转换
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapBackendStatus(status: any): Registration['status'] {
+  const value = typeof status === 'string' ? status.toLowerCase() : ''
+  if (['approved', 'pass', 'passed', '已通过'].includes(value)) {
+    return 'approved'
+  }
+  if (['rejected', 'reject', '已驳回', 'failed'].includes(value)) {
+    return 'rejected'
+  }
+  return 'pending'
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapVocalRegistration(record: any, index: number): Registration {
+  const accountId = record?.account || record?.account_id || record?.user_account || `account-${index + 1}`
+  const accountName = record?.account_name || record?.username || record?.school_name || accountId
+  const participants = Array.isArray(record?.participants) ? record.participants : []
+  const teachers = Array.isArray(record?.guide_teachers) ? record.guide_teachers : []
+  const firstParticipant = participants.length > 0 ? participants[0] : null
+  const workName =
+    record?.song1_title ||
+    record?.work_title ||
+    record?.performance_title ||
+    record?.song2_title ||
+    record?.performance_description ||
+    `声乐节目-${index + 1}`
+
+  const files = []
+  if (record?.performance_video) {
+    files.push({
+      name: '表演视频',
+      type: 'video',
+      size: undefined
+    })
+  }
+
+  if (Array.isArray(record?.attachments)) {
+    record.attachments.forEach((file: { name?: string; size?: number; type?: string }) => {
+      files.push({
+        name: file?.name || '附件',
+        type: file?.type,
+        size: file?.size
+      })
+    })
+  }
+
+  return {
+    id: String(record?.id ?? record?.uuid ?? `${accountId}-${index + 1}`),
+    accountId,
+    accountName,
+    workName,
+    name: firstParticipant?.name || record?.contact_name || record?.account_name || accountName,
+    school: firstParticipant?.school_name || record?.school_name || accountName,
     type: '声乐报名',
-    status: 'pending',
-    phone: '13800138000',
-    email: 'zhangsan@example.com',
-    contact: '张老师',
-    address: '北京市',
-    performanceType: '合唱',
-    minutes: 5,
-    seconds: 30,
-    isOriginal: false,
-    group: 'A组',
-    song1: '春天来了',
-    song2: '夏日之歌',
-    song1HasChinese: true,
-    song2HasChinese: true,
-    song1IsOriginal: false,
-    song2IsOriginal: false,
-    chorusCount: 40,
-    pianoAccompanist: 'teacher',
-    leader: '李老师',
-    tutor: '王老师',
-    intro: '这是一首关于春天的合唱作品，展现了春天的美好景象和人们对春天的向往。',
-    teachersCount: 2,
-    membersCount: 40,
-    accompCount: 1,
-    files: [
-      { name: '作品音频.mp3', size: 5120000 },
-      { name: '作品视频.mp4', size: 25600000 },
-      { name: '曲谱.pdf', size: 1024000 }
-    ]
-  },
-  {
-    id: '4',
-    accountId: 'account001',
-    accountName: 'A大学',
-    workName: '月光曲',
-    name: '张三同学2',
-    school: 'A大学',
-    type: '器乐报名',
-    status: 'pending',
-    phone: '13800138001',
-    email: 'zhangsan2@example.com',
-    contact: '张老师',
-    address: '北京市',
-    performanceType: '独奏',
-    minutes: 4,
-    seconds: 15,
-    isOriginal: false,
-    group: 'B组',
-    intro: '经典器乐合奏作品，以月光为主题，表现夜晚的宁静与美好。',
-    teachersCount: 1,
-    membersCount: 1,
-    files: [
-      { name: '演奏视频.mp4', size: 30000000 }
-    ]
-  },
-  {
-    id: '2',
-    accountId: 'account002',
-    accountName: 'B大学',
-    workName: '舞蹈风采',
-    name: '李四',
-    school: 'B大学',
-    type: '舞蹈报名',
-    status: 'pending',
-    phone: '13900139000',
-    email: 'lisi@example.com',
-    contact: '李老师',
-    address: '上海市',
-    performanceType: '群舞',
-    minutes: 6,
-    seconds: 0,
-    isOriginal: true,
-    group: 'A组',
-    intro: '展现校园生活的舞蹈作品，动作优美，编排新颖。',
-    teachersCount: 1,
-    membersCount: 36,
-    files: [
-      { name: '舞蹈视频.mp4', size: 50000000 }
-    ]
-  },
-  {
-    id: '3',
-    accountId: 'account003',
-    accountName: 'C大学',
-    workName: '戏曲选段',
-    name: '王五',
-    school: 'C大学',
-    type: '戏曲报名',
-    status: 'approved',
-    phone: '13700137000',
-    email: 'wangwu@example.com',
-    contact: '王老师',
-    address: '广东省',
-    performanceType: '传统戏曲',
-    minutes: 7,
-    seconds: 30,
-    isOriginal: false,
-    group: 'A组',
-    intro: '经典戏曲选段，传承传统文化艺术。',
-    teachersCount: 1,
-    membersCount: 8,
-    files: [
-      { name: '戏曲表演视频.mp4', size: 40000000 }
-    ]
-  },
-  {
-    id: '5',
-    accountId: 'account004',
-    accountName: 'D大学',
-    workName: '经典朗诵',
-    name: '赵六',
-    school: 'D大学',
-    type: '朗诵报名',
-    status: 'pending',
-    phone: '13600136000',
-    email: 'zhaoliu@example.com',
-    contact: '赵老师',
-    address: '江苏省',
-    performanceType: '集体朗诵',
-    minutes: 5,
-    seconds: 0,
-    isOriginal: true,
-    group: 'A组',
-    intro: '优美的朗诵作品，展现语言艺术魅力。',
-    teachersCount: 1,
-    membersCount: 15,
-    files: [
-      { name: '朗诵视频.mp4', size: 35000000 }
-    ]
-  },
-  {
-    id: '6',
-    accountId: 'account005',
-    accountName: 'E大学',
-    workName: '美育改革创新案例',
-    name: '孙七',
-    school: 'E大学',
-    type: '美育改革创新优秀案例申报',
-    status: 'pending',
-    phone: '13500135000',
-    email: 'sunqi@example.com',
-    caseName: '高校美育改革创新优秀案例',
-    leaderName: '孙教授',
-    leaderTitle: '教授',
-    caseCode: 'CASE001',
-    submitUnit: 'E大学',
-    leaderUnit: 'E大学音乐学院',
-    leaderPhone: '13500135000',
-    category: '高校美育教师队伍建设',
-    intro: '这是一个关于高校美育教师队伍建设的优秀案例。',
-    files: [
-      { name: '案例正文.pdf', size: 2048000 },
-      { name: '附件材料1.pdf', size: 1536000 }
-    ]
-  },
-])
+    status: mapBackendStatus(record?.status),
+    phone: record?.contact_phone || firstParticipant?.phone,
+    email: record?.contact_email || '',
+    contact: record?.contact_name,
+    address: record?.contact_address,
+    intro: record?.performance_description || record?.work_description,
+    performanceType: record?.performance_type,
+    minutes: Number(record?.duration_minutes ?? 0),
+    seconds: Number(record?.duration_seconds ?? 0),
+    isOriginal: Boolean(record?.song1_is_original ?? record?.is_original ?? false),
+    group: record?.group_type,
+    song1: record?.song1_title,
+    song2: record?.song2_title,
+    song1HasChinese: record?.song1_is_chinese,
+    song2HasChinese: record?.song2_is_chinese,
+    song1IsOriginal: record?.song1_is_original,
+    song2IsOriginal: record?.song2_is_original,
+    chorusCount: record?.performer_count,
+    pianoAccompanist: record?.piano_accompaniment,
+    leader: record?.leader_name,
+    tutor: teachers.find((t: { identity?: string }) => t.identity === 'teacher')?.name,
+    teachersCount: teachers.length || undefined,
+    membersCount: participants.length || undefined,
+    files: files.length > 0 ? files : undefined
+  }
+}
+
+const loadVocalRegistrations = async () => {
+  loading.value = true
+  try {
+    const data = await reviewApi.getVocalRegistrations()
+    if (Array.isArray(data)) {
+      list.value = data.map((item, index) => mapVocalRegistration(item, index))
+    } else {
+      list.value = []
+    }
+  } catch (error) {
+    console.error('[ApprovalPage] 获取声乐报名列表失败:', error)
+    ElMessage.error('加载声乐报名数据失败，请稍后重试')
+    list.value = []
+  } finally {
+    loading.value = false
+    multipleSelection.value = []
+  }
+}
+
+onMounted(() => {
+  loadVocalRegistrations()
+})
 
 // 筛选后的报名列表（按节目显示）
 const filteredRegistrations = computed(() => {
@@ -428,6 +370,7 @@ function formatFileSize(bytes: number): string {
         @selection-change="handleSelectionChange"
         stripe
         row-key="id"
+        v-loading="loading"
       >
         <el-table-column type="selection" width="50" />
         <el-table-column prop="accountName" label="大学名称" min-width="200" />
