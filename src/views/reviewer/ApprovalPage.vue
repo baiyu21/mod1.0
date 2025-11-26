@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Link } from '@element-plus/icons-vue'
 import { reviewApi } from '@/services/api'
 
 type Registration = {
@@ -48,8 +49,42 @@ type Registration = {
   teachersCount?: number  // 教师数量
   membersCount?: number  // 成员数量
   accompCount?: number  // 伴奏数量
+  // 完整花名册数据（用于详情展示）
+  guideTeachers?: Array<{
+    id?: number
+    name: string
+    id_card?: string
+    ethnicity?: string
+    age?: number
+    gender?: string
+    region?: string
+    school_name?: string
+    department?: string
+    contact_phone?: string
+    identity?: string  // "teacher" | "conductor"
+    role?: string
+  }>
+  participants?: Array<{
+    id?: number
+    name: string
+    id_card?: string
+    ethnicity?: string
+    age?: number
+    gender?: string
+    region?: string
+    school_name?: string
+    department?: string
+    grade?: string
+    major_category?: string
+    major_name?: string
+    student_id?: string
+    contact_phone?: string
+  }>
   // 上传文件（显示文件名列表）
-  files?: Array<{ name: string; size?: number; type?: string }>  // 上传的文件
+  files?: Array<{ name: string; size?: number; type?: string; url?: string }>  // 上传的文件
+  // 原始数据（用于详情展示）
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rawData?: any  // 保存原始后端数据
 }
 
 const keyword = ref('')
@@ -83,8 +118,7 @@ const batchRejectReason = ref('')
 
 const list = ref<Registration[]>([])
 // 后端数据转换
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapBackendStatus(status: any): Registration['status'] {
+function mapBackendStatus(status: string | undefined | null): Registration['status'] {
   const value = typeof status === 'string' ? status.toLowerCase() : ''
   if (['approved', 'pass', 'passed', '已通过'].includes(value)) {
     return 'approved'
@@ -96,12 +130,18 @@ function mapBackendStatus(status: any): Registration['status'] {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapVocalRegistration(record: any, index: number): Registration {
-  const accountId = record?.account || record?.account_id || record?.user_account || `account-${index + 1}`
+function mapVocalRegistration(record: Record<string, any>, index: number): Registration {
+  const accountId = record?.account || record?.account_id || record?.user_account || record?.created_by?.toString() || `account-${index + 1}`
   const accountName = record?.account_name || record?.username || record?.school_name || accountId
   const participants = Array.isArray(record?.participants) ? record.participants : []
   const teachers = Array.isArray(record?.guide_teachers) ? record.guide_teachers : []
   const firstParticipant = participants.length > 0 ? participants[0] : null
+  const firstTeacher = teachers.length > 0 ? teachers[0] : null
+
+  // 从第一个参与者或第一个老师获取学校名称
+  const schoolName = firstParticipant?.school_name || firstTeacher?.school_name || record?.school_name || accountName
+
+  // 节目名称：优先使用曲目1，其次曲目2，最后使用描述
   const workName =
     record?.song1_title ||
     record?.work_title ||
@@ -115,30 +155,38 @@ function mapVocalRegistration(record: any, index: number): Registration {
     files.push({
       name: '表演视频',
       type: 'video',
-      size: undefined
+      size: undefined,
+      url: record.performance_video
     })
   }
 
   if (Array.isArray(record?.attachments)) {
-    record.attachments.forEach((file: { name?: string; size?: number; type?: string }) => {
+    record.attachments.forEach((file: { name?: string; size?: number; type?: string; url?: string }) => {
       files.push({
         name: file?.name || '附件',
         type: file?.type,
-        size: file?.size
+        size: file?.size,
+        url: file?.url
       })
     })
   }
+
+  // 获取指导老师（identity === "teacher"）
+  const instructor = teachers.find((t: { identity?: string }) => t.identity === 'teacher')
+  // 获取指挥（identity === "conductor"）
+  const conductor = teachers.find((t: { identity?: string }) => t.identity === 'conductor')
 
   return {
     id: String(record?.id ?? record?.uuid ?? `${accountId}-${index + 1}`),
     accountId,
     accountName,
     workName,
-    name: firstParticipant?.name || record?.contact_name || record?.account_name || accountName,
-    school: firstParticipant?.school_name || record?.school_name || accountName,
+    name: firstParticipant?.name || record?.contact_name || accountName,
+    school: schoolName,
     type: '声乐报名',
     status: mapBackendStatus(record?.status),
-    phone: record?.contact_phone || firstParticipant?.phone,
+    rejectReason: record?.rejection_reason || undefined,
+    phone: record?.contact_phone || firstParticipant?.contact_phone || firstParticipant?.phone,
     email: record?.contact_email || '',
     contact: record?.contact_name,
     address: record?.contact_address,
@@ -156,14 +204,103 @@ function mapVocalRegistration(record: any, index: number): Registration {
     song2IsOriginal: record?.song2_is_original,
     chorusCount: record?.performer_count,
     pianoAccompanist: record?.piano_accompaniment,
-    leader: record?.leader_name,
-    tutor: teachers.find((t: { identity?: string }) => t.identity === 'teacher')?.name,
+    leader: conductor?.name || record?.leader_name,
+    tutor: instructor?.name,
     teachersCount: teachers.length || undefined,
     membersCount: participants.length || undefined,
-    files: files.length > 0 ? files : undefined
+    // 保存完整花名册数据
+    guideTeachers: teachers.length > 0 ? teachers : undefined,
+    participants: participants.length > 0 ? participants : undefined,
+    files: files.length > 0 ? files : undefined,
+    // 保存原始数据
+    rawData: record
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapDanceRegistration(record: Record<string, any>, index: number): Registration {
+  const accountId = record?.account || record?.account_id || record?.user_account || record?.created_by?.toString() || `account-${index + 1}`
+  const accountName = record?.account_name || record?.username || record?.school_name || accountId
+  const participants = Array.isArray(record?.participants) ? record.participants : []
+  const teachers = Array.isArray(record?.guide_teachers) ? record.guide_teachers : []
+  const firstParticipant = participants.length > 0 ? participants[0] : null
+  const firstTeacher = teachers.length > 0 ? teachers[0] : null
+
+  // 从第一个参与者或第一个老师获取学校名称
+  const schoolName = firstParticipant?.school_name || firstTeacher?.school_name || record?.school_name || accountName
+
+  // 作品名称
+  const workName = record?.work_title || record?.performance_title || record?.work_description || `舞蹈作品-${index + 1}`
+
+  const files = []
+  if (record?.work_file) {
+    files.push({
+      name: '作品文件',
+      type: 'file',
+      size: undefined,
+      url: record.work_file
+    })
+  }
+  if (record?.work_file_url) {
+    files.push({
+      name: '作品文件',
+      type: 'file',
+      size: undefined,
+      url: record.work_file_url
+    })
+  }
+
+  if (Array.isArray(record?.attachments)) {
+    record.attachments.forEach((file: { name?: string; size?: number; type?: string; url?: string }) => {
+      files.push({
+        name: file?.name || '附件',
+        type: file?.type,
+        size: file?.size,
+        url: file?.url
+      })
+    })
+  }
+
+  // 获取指导老师
+  const instructor = teachers.find((t: { identity?: string }) =>
+    t.identity === '指导教师' || t.identity === 'teacher' || t.identity === 'instructor'
+  )
+
+  return {
+    id: String(record?.id ?? record?.uuid ?? `${accountId}-${index + 1}`),
+    accountId,
+    accountName,
+    workName,
+    name: firstParticipant?.name || record?.contact_name || accountName,
+    school: schoolName,
+    type: '舞蹈报名',
+    status: mapBackendStatus(record?.status),
+    rejectReason: record?.rejection_reason || undefined,
+    phone: record?.contact_phone || firstParticipant?.phone || firstParticipant?.contact_phone,
+    email: record?.contact_email || '',
+    contact: record?.contact_name,
+    address: record?.contact_address,
+    intro: record?.work_description || record?.performance_description,
+    performanceType: record?.performance_type,
+    minutes: Number(record?.duration_minutes ?? 0),
+    seconds: Number(record?.duration_seconds ?? 0),
+    isOriginal: Boolean(record?.is_original ?? false),
+    group: record?.group_type,
+    chorusCount: record?.performer_count,
+    tutor: instructor?.name,
+    teachersCount: teachers.length || undefined,
+    membersCount: participants.length || undefined,
+    // 保存完整花名册数据（用于统计）
+    guideTeachers: teachers.length > 0 ? teachers : undefined,
+    participants: participants.length > 0 ? participants : undefined,
+    files: files.length > 0 ? files : undefined,
+    // 保存原始数据
+    rawData: record
+  }
+}
+
+// 单独加载声乐报名（保留以备将来使用）
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const loadVocalRegistrations = async () => {
   loading.value = true
   try {
@@ -183,8 +320,64 @@ const loadVocalRegistrations = async () => {
   }
 }
 
+// 单独加载舞蹈报名（保留以备将来使用）
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const loadDanceRegistrations = async () => {
+  loading.value = true
+  try {
+    const data = await reviewApi.getDanceRegistrations()
+    if (Array.isArray(data)) {
+      const danceList = data.map((item, index) => mapDanceRegistration(item, index))
+      list.value = [...list.value, ...danceList]
+    }
+  } catch (error) {
+    console.error('[ApprovalPage] 获取舞蹈报名列表失败:', error)
+    ElMessage.error('加载舞蹈报名数据失败，请稍后重试')
+  } finally {
+    loading.value = false
+    multipleSelection.value = []
+  }
+}
+
+const loadAllRegistrations = async () => {
+  loading.value = true
+  list.value = []
+  try {
+    // 并行加载所有类型的报名数据
+    const [vocalData, danceData] = await Promise.all([
+      reviewApi.getVocalRegistrations().catch(err => {
+        console.error('[ApprovalPage] 获取声乐报名列表失败:', err)
+        return []
+      }),
+      reviewApi.getDanceRegistrations().catch(err => {
+        console.error('[ApprovalPage] 获取舞蹈报名列表失败:', err)
+        return []
+      })
+    ])
+
+    const allRegistrations: Registration[] = []
+
+    if (Array.isArray(vocalData)) {
+      allRegistrations.push(...vocalData.map((item, index) => mapVocalRegistration(item, index)))
+    }
+
+    if (Array.isArray(danceData)) {
+      allRegistrations.push(...danceData.map((item, index) => mapDanceRegistration(item, index)))
+    }
+
+    list.value = allRegistrations
+  } catch (error) {
+    console.error('[ApprovalPage] 加载报名列表失败:', error)
+    ElMessage.error('加载报名数据失败，请稍后重试')
+    list.value = []
+  } finally {
+    loading.value = false
+    multipleSelection.value = []
+  }
+}
+
 onMounted(() => {
-  loadVocalRegistrations()
+  loadAllRegistrations()
 })
 
 // 筛选后的报名列表（按节目显示）
@@ -207,13 +400,52 @@ function viewRegistrationDetail(row: Registration) {
 }
 
 // 审核通过（按节目）
-function approveRegistration(id: string) {
-  list.value = list.value.map(i =>
-    i.id === id && i.status === 'pending'
-      ? { ...i, status: 'approved', rejectReason: undefined }
-      : i
-  )
-  ElMessage.success('审核通过')
+async function approveRegistration(id: string) {
+  const registration = list.value.find(r => r.id === id)
+  if (!registration) {
+    ElMessage.warning('该记录不存在')
+    return
+  }
+
+  if (registration.status !== 'pending') {
+    ElMessage.warning('该记录已审核，无法重复操作')
+    return
+  }
+
+  // 从原始数据中获取真实的记录ID（数字类型）
+  const recordId = registration.rawData?.id || parseInt(id, 10)
+  if (!recordId || isNaN(Number(recordId))) {
+    ElMessage.error('无法获取有效的记录ID')
+    return
+  }
+
+  try {
+    const success = await reviewApi.reviewAction(recordId, 'approve')
+    if (success) {
+      // 更新本地状态
+      list.value = list.value.map(i =>
+        i.id === id ? { ...i, status: 'approved', rejectReason: undefined } : i
+      )
+      ElMessage.success('审核通过')
+    } else {
+      ElMessage.error('审核操作失败，请稍后重试')
+    }
+  } catch (error) {
+    console.error('[ApprovalPage] 审核通过失败:', error)
+    // 处理已知的错误信息
+    if (error instanceof Error) {
+      const errorMessage = error.message
+      if (errorMessage.includes('已审核') || errorMessage.includes('无法重复操作')) {
+        ElMessage.warning(errorMessage)
+        // 刷新列表数据，确保状态同步
+        await loadAllRegistrations()
+      } else {
+        ElMessage.error(errorMessage || '审核操作失败，请稍后重试')
+      }
+    } else {
+      ElMessage.error('审核操作失败，请稍后重试')
+    }
+  }
 }
 
 // 打开驳回理由填写对话框
@@ -224,22 +456,69 @@ function openRejectReasonDialog(id: string) {
 }
 
 // 提交单个节目驳回
-function submitReject() {
+async function submitReject() {
   if (!rejectReason.value.trim()) {
     ElMessage.warning('请填写驳回理由')
     return
   }
   if (!currentRejectAccount.value) return
 
-  list.value = list.value.map(i =>
-    i.id === currentRejectAccount.value && i.status === 'pending'
-      ? { ...i, status: 'rejected', rejectReason: rejectReason.value.trim() }
-      : i
-  )
-  ElMessage.success('已驳回')
-  rejectReasonDialogVisible.value = false
-  rejectReason.value = ''
-  currentRejectAccount.value = null
+  const registration = list.value.find(r => r.id === currentRejectAccount.value)
+  if (!registration) {
+    ElMessage.warning('该记录不存在')
+    rejectReasonDialogVisible.value = false
+    rejectReason.value = ''
+    currentRejectAccount.value = null
+    return
+  }
+
+  if (registration.status !== 'pending') {
+    ElMessage.warning('该记录已审核，无法重复操作')
+    rejectReasonDialogVisible.value = false
+    rejectReason.value = ''
+    currentRejectAccount.value = null
+    return
+  }
+
+  // 从原始数据中获取真实的记录ID（数字类型）
+  const recordId = registration.rawData?.id || parseInt(currentRejectAccount.value, 10)
+  if (!recordId || isNaN(Number(recordId))) {
+    ElMessage.error('无法获取有效的记录ID')
+    return
+  }
+
+  try {
+    const success = await reviewApi.reviewAction(recordId, 'reject', rejectReason.value.trim())
+    if (success) {
+      // 更新本地状态
+      list.value = list.value.map(i =>
+        i.id === currentRejectAccount.value
+          ? { ...i, status: 'rejected', rejectReason: rejectReason.value.trim() }
+          : i
+      )
+      ElMessage.success('已驳回')
+      rejectReasonDialogVisible.value = false
+      rejectReason.value = ''
+      currentRejectAccount.value = null
+    } else {
+      ElMessage.error('驳回操作失败，请稍后重试')
+    }
+  } catch (error) {
+    console.error('[ApprovalPage] 驳回失败:', error)
+    // 处理已知的错误信息
+    if (error instanceof Error) {
+      const errorMessage = error.message
+      if (errorMessage.includes('已审核') || errorMessage.includes('无法重复操作')) {
+        ElMessage.warning(errorMessage)
+        // 刷新列表数据，确保状态同步
+        await loadAllRegistrations()
+      } else {
+        ElMessage.error(errorMessage || '驳回操作失败，请稍后重试')
+      }
+    } else {
+      ElMessage.error('驳回操作失败，请稍后重试')
+    }
+  }
 }
 
 // 打开批量驳回理由填写对话框
@@ -266,42 +545,141 @@ function openBatchRejectReasonDialog() {
 }
 
 // 提交批量驳回
-function submitBatchReject() {
+async function submitBatchReject() {
   if (!batchRejectReason.value.trim()) {
     ElMessage.warning('请填写驳回理由')
     return
   }
 
-  const ids = new Set(multipleSelection.value.map(r => r.id))
+  const pendingRegistrations = multipleSelection.value.filter(r => r.status === 'pending')
+  if (pendingRegistrations.length === 0) {
+    ElMessage.warning('所选记录中没有待审核的记录')
+    return
+  }
 
-  list.value = list.value.map(i =>
-    ids.has(i.id) && i.status === 'pending'
-      ? { ...i, status: 'rejected', rejectReason: batchRejectReason.value.trim() }
-      : i
-  )
+  try {
+    // 提取所有待审核记录的ID
+    const recordIds: (string | number)[] = []
+    const validRegistrations: Registration[] = []
 
-  ElMessage.success(`已批量驳回 ${ids.size} 个节目的报名`)
-  batchRejectReasonDialogVisible.value = false
-  batchRejectReason.value = ''
-  multipleSelection.value = []
+    pendingRegistrations.forEach((registration) => {
+      const recordId = registration.rawData?.id || parseInt(registration.id, 10)
+      if (recordId && !isNaN(Number(recordId))) {
+        recordIds.push(recordId)
+        validRegistrations.push(registration)
+      } else {
+        console.warn('[submitBatchReject] 无效的记录ID:', registration.id)
+      }
+    })
+
+    if (recordIds.length === 0) {
+      ElMessage.error('没有有效的记录ID')
+      return
+    }
+
+    // 使用批量接口提交驳回
+    const success = await reviewApi.batchReviewAction(recordIds, 'reject', batchRejectReason.value.trim())
+
+    if (success) {
+      // 更新本地状态
+      const ids = new Set(validRegistrations.map(r => r.id))
+      list.value = list.value.map(i =>
+        ids.has(i.id) && i.status === 'pending'
+          ? { ...i, status: 'rejected', rejectReason: batchRejectReason.value.trim() }
+          : i
+      )
+
+      ElMessage.success(`已批量驳回 ${recordIds.length} 个节目的报名`)
+      batchRejectReasonDialogVisible.value = false
+      batchRejectReason.value = ''
+      multipleSelection.value = []
+    } else {
+      ElMessage.error('批量驳回操作失败，请稍后重试')
+    }
+  } catch (error) {
+    console.error('[ApprovalPage] 批量驳回失败:', error)
+    // 处理已知的错误信息
+    if (error instanceof Error) {
+      const errorMessage = error.message
+      if (errorMessage.includes('已审核') || errorMessage.includes('无法重复操作')) {
+        ElMessage.warning(errorMessage)
+        // 刷新列表数据，确保状态同步
+        await loadAllRegistrations()
+      } else {
+        ElMessage.error(errorMessage || '批量驳回操作失败，请稍后重试')
+      }
+    } else {
+      ElMessage.error('批量驳回操作失败，请稍后重试')
+    }
+  }
 }
 
 // 批量审核通过（按节目）
-function batchApprove() {
+async function batchApprove() {
   if (multipleSelection.value.length === 0) {
     ElMessage.warning('请先选择要审核的节目')
     return
   }
-  const ids = new Set(multipleSelection.value.map(r => r.id))
 
-  list.value = list.value.map(i =>
-    ids.has(i.id) && i.status === 'pending'
-      ? { ...i, status: 'approved', rejectReason: undefined }
-      : i
-  )
+  const pendingRegistrations = multipleSelection.value.filter(r => r.status === 'pending')
+  if (pendingRegistrations.length === 0) {
+    ElMessage.warning('所选记录中没有待审核的记录')
+    return
+  }
 
-  ElMessage.success(`已批量通过 ${ids.size} 个节目的报名`)
-  multipleSelection.value = []
+  try {
+    // 提取所有待审核记录的ID
+    const recordIds: (string | number)[] = []
+    const validRegistrations: Registration[] = []
+
+    pendingRegistrations.forEach((registration) => {
+      const recordId = registration.rawData?.id || parseInt(registration.id, 10)
+      if (recordId && !isNaN(Number(recordId))) {
+        recordIds.push(recordId)
+        validRegistrations.push(registration)
+      } else {
+        console.warn('[batchApprove] 无效的记录ID:', registration.id)
+      }
+    })
+
+    if (recordIds.length === 0) {
+      ElMessage.error('没有有效的记录ID')
+      return
+    }
+
+    // 使用批量接口提交审核
+    const success = await reviewApi.batchReviewAction(recordIds, 'approve')
+
+    if (success) {
+      // 更新本地状态
+      const ids = new Set(validRegistrations.map(r => r.id))
+      list.value = list.value.map(i =>
+        ids.has(i.id) && i.status === 'pending'
+          ? { ...i, status: 'approved', rejectReason: undefined }
+          : i
+      )
+
+      ElMessage.success(`已批量通过 ${recordIds.length} 个节目的报名`)
+      multipleSelection.value = []
+    } else {
+      ElMessage.error('批量审核操作失败，请稍后重试')
+    }
+  } catch (error) {
+    console.error('[ApprovalPage] 批量审核通过失败:', error)
+    // 处理已知的错误信息
+    if (error instanceof Error) {
+      const errorMessage = error.message
+      if (errorMessage.includes('已审核') || errorMessage.includes('无法重复操作')) {
+        ElMessage.warning(errorMessage)
+        // 刷新列表数据，确保状态同步
+        await loadAllRegistrations()
+      } else {
+        ElMessage.error(errorMessage || '批量审核操作失败，请稍后重试')
+      }
+    } else {
+      ElMessage.error('批量审核操作失败，请稍后重试')
+    }
+  }
 }
 
 function getStatusText(status: string) {
@@ -329,6 +707,13 @@ function formatFileSize(bytes: number): string {
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
+// 打开文件链接
+function openFileUrl(url: string) {
+  if (url) {
+    window.open(url, '_blank')
+  }
 }
 </script>
 
@@ -556,7 +941,15 @@ function formatFileSize(bytes: number): string {
       <div v-if="currentDetail.files && currentDetail.files.length > 0" style="margin-top: 20px">
         <h4>上传文件</h4>
         <el-table :data="currentDetail.files" border size="small" max-height="200">
-          <el-table-column prop="name" label="文件名" min-width="200" />
+          <el-table-column prop="name" label="文件名" min-width="200">
+            <template #default="{ row }">
+              <a v-if="row.url" :href="row.url" target="_blank" style="color: #409EFF; text-decoration: none;">
+                {{ row.name }}
+                <el-icon style="margin-left: 4px;"><Link /></el-icon>
+              </a>
+              <span v-else>{{ row.name }}</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="type" label="文件类型" width="120">
             <template #default="{ row }">
               {{ row.type || '未知' }}
@@ -565,6 +958,13 @@ function formatFileSize(bytes: number): string {
           <el-table-column label="文件大小" width="120">
             <template #default="{ row }">
               {{ row.size ? formatFileSize(row.size) : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="100">
+            <template #default="{ row }">
+              <el-button v-if="row.url" type="primary" size="small" link @click="openFileUrl(row.url)">
+                查看
+              </el-button>
             </template>
           </el-table-column>
         </el-table>

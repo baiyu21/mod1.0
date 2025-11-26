@@ -194,7 +194,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Document, Download } from '@element-plus/icons-vue'
 import type { OperationLog } from '@/types'
-import { fetchOperationLogs, deleteLogs } from '@/services/mock'
+import { logApi } from '@/services/api'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
@@ -254,7 +254,7 @@ const deleteRules: FormRules = {
   ]
 }
 
-// 根据用户ID推断用户类型
+// 根据用户ID推断用户类型（保留用于导出功能）
 const getUserType = (userId: string): string => {
   if (userId.startsWith('user')) return 'user'
   if (userId.startsWith('reviewer')) return 'approval'
@@ -263,49 +263,52 @@ const getUserType = (userId: string): string => {
   return ''
 }
 
-// 应用筛选条件
-const applyFilters = (logsData: OperationLog[]): OperationLog[] => {
-  let filtered = [...logsData]
-
-  // 按月份筛选
-  if (filterForm.value.month) {
-    filtered = filtered.filter(log => {
-      const logDate = new Date(log.timestamp)
-      const logMonth = `${logDate.getFullYear()}-${String(logDate.getMonth() + 1).padStart(2, '0')}`
-      return logMonth === filterForm.value.month
-    })
-  }
-
-  // 按用户类型筛选
-  if (filterForm.value.userType) {
-    filtered = filtered.filter(log => {
-      const logUserType = getUserType(log.userId)
-      return logUserType === filterForm.value.userType
-    })
-  }
-
-  return filtered
-}
-
 // 加载日志
 const loadLogs = async () => {
   loading.value = true
   try {
-    const fetchedLogs = await fetchOperationLogs()
-    allLogs.value = fetchedLogs
+    // 构建查询参数
+    const params: { month?: string; user_type?: string } = {}
+    if (filterForm.value.month) {
+      params.month = filterForm.value.month
+    }
+    if (filterForm.value.userType) {
+      params.user_type = filterForm.value.userType
+    }
 
-    // 应用筛选
-    const filtered = applyFilters(fetchedLogs)
-    filteredLogs.value = filtered
-    total.value = filtered.length
+    // 调用真实API接口
+    const fetchedLogs = await logApi.getLogs(params)
+    
+    // 转换数据格式以匹配 OperationLog 接口
+    const convertedLogs: OperationLog[] = fetchedLogs.map((log: any) => {
+      return {
+        id: String(log.id || log.log_id || Math.random().toString(36).substr(2, 9)),
+        userId: String(log.user_id || log.userId || log.operator_account || ''),
+        userName: log.operator_account || log.user_name || log.userName || log.username || '未知用户',
+        action: log.operation || log.action || log.action_type || '未知操作',
+        module: log.operator_role || log.module || log.module_name || '未知模块',
+        description: log.description || log.detail || log.message || '',
+        ip: log.ip || log.ip_address || '',
+        timestamp: log.timestamp || log.created_at || log.time || new Date().toISOString(),
+        result: (log.status_code === 200 || log.result === 'success' || log.status === 'success' || log.success === true) ? 'success' : 'failed'
+      }
+    })
+
+    allLogs.value = convertedLogs
+    filteredLogs.value = convertedLogs
+    total.value = convertedLogs.length
 
     // 分页处理
     const start = (currentPage.value - 1) * pageSize.value
     const end = start + pageSize.value
-    logs.value = filtered.slice(start, end)
+    logs.value = convertedLogs.slice(start, end)
   } catch (error) {
     ElMessage.error('加载日志失败')
-    console.error(error)
+    console.error('[LogView] 加载日志失败:', error)
+    allLogs.value = []
+    filteredLogs.value = []
+    logs.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
@@ -355,22 +358,43 @@ const handleExport = async () => {
 
   exporting.value = true
   try {
-    // 获取所有日志
-    const allLogsData = await fetchOperationLogs()
-
-    // 按日期筛选
+    // 从日期中提取月份
     const selectedDate = exportForm.value.date
-    let exportLogs = allLogsData.filter(log => {
-      const logDate = new Date(log.timestamp)
-      const logDateStr = logDate.toISOString().slice(0, 10)
-      return logDateStr === selectedDate
+    const month = selectedDate ? selectedDate.substring(0, 7) : undefined // YYYY-MM
+
+    // 构建查询参数
+    const params: { month?: string; user_type?: string } = {}
+    if (month) {
+      params.month = month
+    }
+    if (exportForm.value.userType) {
+      params.user_type = exportForm.value.userType
+    }
+
+    // 调用API获取日志
+    const fetchedLogs = await logApi.getLogs(params)
+
+    // 转换数据格式
+    let exportLogs: OperationLog[] = fetchedLogs.map((log: any) => {
+      return {
+        id: String(log.id || log.log_id || Math.random().toString(36).substr(2, 9)),
+        userId: String(log.user_id || log.userId || log.operator_account || ''),
+        userName: log.operator_account || log.user_name || log.userName || log.username || '未知用户',
+        action: log.operation || log.action || log.action_type || '未知操作',
+        module: log.operator_role || log.module || log.module_name || '未知模块',
+        description: log.description || log.detail || log.message || '',
+        ip: log.ip || log.ip_address || '',
+        timestamp: log.timestamp || log.created_at || log.time || new Date().toISOString(),
+        result: (log.status_code === 200 || log.result === 'success' || log.status === 'success' || log.success === true) ? 'success' : 'failed'
+      }
     })
 
-    // 按用户类型筛选
-    if (exportForm.value.userType) {
+    // 按日期筛选（精确到天）
+    if (selectedDate) {
       exportLogs = exportLogs.filter(log => {
-        const logUserType = getUserType(log.userId)
-        return logUserType === exportForm.value.userType
+        const logDate = new Date(log.timestamp)
+        const logDateStr = logDate.toISOString().slice(0, 10)
+        return logDateStr === selectedDate
       })
     }
 
@@ -513,19 +537,12 @@ const handleBatchDelete = async () => {
       return
     }
 
-    const success = await deleteLogs(
-      logIds,
-      userStore.userId || '',
-      userStore.userId || '未知用户'
-    )
-
-    if (success) {
-      ElMessage.success(`成功删除 ${logIds.length} 条日志`)
-      deleteDialogVisible.value = false
-      await loadLogs()
-    } else {
-      ElMessage.error('删除失败')
-    }
+    // TODO: 对接删除日志接口
+    // const success = await logApi.deleteLogs(logIds, userStore.userId || '', userStore.userId || '未知用户')
+    
+    // 暂时提示功能未实现
+    ElMessage.warning('删除功能待对接接口')
+    deleteDialogVisible.value = false
   } catch {
     // 用户取消
   } finally {

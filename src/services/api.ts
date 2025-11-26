@@ -719,7 +719,85 @@ export const registrationApi = {
  */
 export const logApi = {
   /**
-   * 获取所有操作日志
+   * 获取操作日志列表
+   * @param params 查询参数
+   * @param params.month 月份（格式：YYYY-MM，如：2025-11）
+   * @param params.user_type 用户类型（user, approval, admin, logaudit）
+   * @returns 操作日志列表
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getLogs: async (params?: { month?: string; user_type?: string }): Promise<any[]> => {
+    try {
+      console.log('[getLogs] 请求操作日志列表:', params)
+
+      // 构建查询参数
+      const queryParams: Record<string, string> = {}
+      if (params?.month) {
+        queryParams.month = params.month
+      }
+      if (params?.user_type) {
+        queryParams.user_type = params.user_type
+      }
+
+      // 构建查询字符串
+      const queryString = new URLSearchParams(queryParams).toString()
+      const url = queryString
+        ? `${API_BASE}/logs/list/?${queryString}`
+        : `${API_BASE}/logs/list/`
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await get<any>(url)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      console.log('[getLogs] 响应数据:', JSON.stringify(result, null, 2))
+
+      // 宽松处理响应格式
+      // 情况1: result.data 是数组
+      if (result && Array.isArray(result.data)) {
+        console.log('[getLogs] 从 result.data 提取数据，数量:', result.data.length)
+        return result.data
+      }
+
+      // 情况2: result 本身就是数组
+      if (Array.isArray(result)) {
+        console.log('[getLogs] result 本身就是数组，数量:', result.length)
+        return result
+      }
+
+      // 情况3: 尝试查找其他可能的数组字段
+      if (result && typeof result === 'object') {
+        const possibleArrayFields = ['list', 'items', 'records', 'results', 'logs']
+        for (const field of possibleArrayFields) {
+          if (Array.isArray(result[field])) {
+            console.log(`[getLogs] 从 result.${field} 提取数据，数量:`, result[field].length)
+            return result[field]
+          }
+        }
+      }
+
+      console.warn('[getLogs] 响应格式不符合预期，返回空数组')
+      console.warn('[getLogs] 响应结构:', {
+        isArray: Array.isArray(result),
+        hasData: !!result?.data,
+        dataIsArray: Array.isArray(result?.data),
+        resultKeys: result && typeof result === 'object' ? Object.keys(result) : []
+      })
+      return []
+    } catch (error: unknown) {
+      console.error('Get logs error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+      }
+      return []
+    }
+  },
+
+  /**
+   * 获取所有操作日志（保留兼容性）
    * @returns 操作日志列表
    */
   getOperationLogs: async (): Promise<OperationLog[]> => {
@@ -803,6 +881,293 @@ export const reviewApi = {
         console.error('错误响应数据:', response?.data)
       }
       return []
+    }
+  },
+
+  /**
+   * 获取声乐报名列表
+   * @returns 声乐报名记录列表
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getVocalRegistrations: async (): Promise<any[]> => {
+    try {
+      console.log('[getVocalRegistrations] 请求声乐报名列表')
+      // 接口路径：/api/vocal/api/registrations/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await get<any>(`${API_BASE}/vocal/api/registrations/`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      console.log('[getVocalRegistrations] 响应数据:', JSON.stringify(result, null, 2))
+
+      // 宽松处理响应格式，忽略多余字段
+      // 情况1: result.data 是数组（标准格式：{ code: 200, msg: "...", data: [...] }）
+      if (result && Array.isArray(result.data)) {
+        console.log('[getVocalRegistrations] 从 result.data 提取数据，数量:', result.data.length)
+        return result.data
+      }
+
+      // 情况2: result 本身就是数组
+      if (Array.isArray(result)) {
+        console.log('[getVocalRegistrations] result 本身就是数组，数量:', result.length)
+        return result
+      }
+
+      // 情况3: result.data 存在但不是数组，尝试查找其他可能的数组字段
+      if (result && result.data && typeof result.data === 'object') {
+        // 尝试查找常见的数组字段
+        const possibleArrayFields = ['list', 'items', 'records', 'results']
+        for (const field of possibleArrayFields) {
+          if (Array.isArray(result.data[field])) {
+            console.log(`[getVocalRegistrations] 从 result.data.${field} 提取数据，数量:`, result.data[field].length)
+            return result.data[field]
+          }
+        }
+      }
+
+      // 情况4: 检查 result 中是否有直接的数组字段
+      if (result && typeof result === 'object') {
+        const possibleArrayFields = ['list', 'items', 'records', 'results', 'data']
+        for (const field of possibleArrayFields) {
+          if (Array.isArray(result[field])) {
+            console.log(`[getVocalRegistrations] 从 result.${field} 提取数据，数量:`, result[field].length)
+            return result[field]
+          }
+        }
+      }
+
+      // 如果都不匹配，记录警告但尝试返回空数组
+      console.warn('[getVocalRegistrations] 响应格式不符合预期，返回空数组')
+      console.warn('[getVocalRegistrations] 响应结构:', {
+        isArray: Array.isArray(result),
+        hasData: !!result?.data,
+        dataIsArray: Array.isArray(result?.data),
+        resultKeys: result && typeof result === 'object' ? Object.keys(result) : []
+      })
+      return []
+    } catch (error: unknown) {
+      console.error('Get vocal registrations error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+      }
+      return []
+    }
+  },
+
+  /**
+   * 获取舞蹈报名列表
+   * @returns 舞蹈报名记录列表
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getDanceRegistrations: async (): Promise<any[]> => {
+    try {
+      console.log('[getDanceRegistrations] 请求舞蹈报名列表')
+      // 接口路径：/api/dance/registrations/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await get<any>(`${API_BASE}/dance/registrations/`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      console.log('[getDanceRegistrations] 响应数据:', JSON.stringify(result, null, 2))
+
+      // 宽松处理响应格式，忽略多余字段
+      // 情况1: result.data 是数组（标准格式：{ code: 200, msg: "...", data: [...] }）
+      if (result && Array.isArray(result.data)) {
+        console.log('[getDanceRegistrations] 从 result.data 提取数据，数量:', result.data.length)
+        return result.data
+      }
+
+      // 情况2: result 本身就是数组
+      if (Array.isArray(result)) {
+        console.log('[getDanceRegistrations] result 本身就是数组，数量:', result.length)
+        return result
+      }
+
+      // 情况3: result.data 存在但不是数组，尝试查找其他可能的数组字段
+      if (result && result.data && typeof result.data === 'object') {
+        const possibleArrayFields = ['list', 'items', 'records', 'results']
+        for (const field of possibleArrayFields) {
+          if (Array.isArray(result.data[field])) {
+            console.log(`[getDanceRegistrations] 从 result.data.${field} 提取数据，数量:`, result.data[field].length)
+            return result.data[field]
+          }
+        }
+      }
+
+      // 情况4: 检查 result 中是否有直接的数组字段
+      if (result && typeof result === 'object') {
+        const possibleArrayFields = ['list', 'items', 'records', 'results', 'data']
+        for (const field of possibleArrayFields) {
+          if (Array.isArray(result[field])) {
+            console.log(`[getDanceRegistrations] 从 result.${field} 提取数据，数量:`, result[field].length)
+            return result[field]
+          }
+        }
+      }
+
+      // 如果都不匹配，记录警告但尝试返回空数组
+      console.warn('[getDanceRegistrations] 响应格式不符合预期，返回空数组')
+      console.warn('[getDanceRegistrations] 响应结构:', {
+        isArray: Array.isArray(result),
+        hasData: !!result?.data,
+        dataIsArray: Array.isArray(result?.data),
+        resultKeys: result && typeof result === 'object' ? Object.keys(result) : []
+      })
+      return []
+    } catch (error: unknown) {
+      console.error('Get dance registrations error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+      }
+      return []
+    }
+  },
+
+  /**
+   * 审核操作（通过或驳回）- 单个记录
+   * @param recordId 报名记录ID
+   * @param action 操作类型：'approve' | 'reject'
+   * @param rejectionReason 驳回理由（驳回时必填）
+   * @returns 是否操作成功
+   */
+  reviewAction: async (recordId: string | number, action: 'approve' | 'reject', rejectionReason?: string): Promise<boolean> => {
+    try {
+      console.log('[reviewAction] 提交单个审核操作:', { recordId, action, rejectionReason })
+
+      const requestData: {
+        record_id: string | number
+        action: string
+        rejection_reason?: string
+      } = {
+        record_id: recordId,
+        action: action
+      }
+
+      // 如果是驳回操作，需要提供驳回理由
+      if (action === 'reject') {
+        if (!rejectionReason || !rejectionReason.trim()) {
+          console.error('[reviewAction] 驳回操作必须提供驳回理由')
+          return false
+        }
+        requestData.rejection_reason = rejectionReason.trim()
+      }
+
+      // 接口路径：/api/review/api/review-action/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>(`${API_BASE}/review/api/review-action/`, requestData)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      console.log('[reviewAction] 响应数据:', JSON.stringify(result, null, 2))
+
+      // 检查响应格式
+      if (result.code === 200 || result.success === true || (result.data && result.data.success === true)) {
+        console.log('[reviewAction] 审核操作成功')
+        return true
+      }
+      console.error('[reviewAction] 审核操作失败: 响应异常', result)
+      return false
+    } catch (error: unknown) {
+      console.error('Review action error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+
+        // 处理400错误，提取错误信息
+        if (response?.status === 400 && response?.data) {
+          const errorMessage = response.data.message || response.data.detail || '审核操作失败'
+          // 抛出包含错误信息的异常，让调用方可以处理
+          throw new Error(errorMessage)
+        }
+      }
+      throw error
+    }
+  },
+
+  /**
+   * 批量审核操作（通过或驳回）
+   * @param recordIds 报名记录ID数组
+   * @param action 操作类型：'approve' | 'reject'
+   * @param rejectionReason 驳回理由（驳回时必填）
+   * @returns 是否操作成功
+   */
+  batchReviewAction: async (recordIds: (string | number)[], action: 'approve' | 'reject', rejectionReason?: string): Promise<boolean> => {
+    try {
+      console.log('[batchReviewAction] 提交批量审核操作:', { recordIds, action, rejectionReason })
+
+      if (!Array.isArray(recordIds) || recordIds.length === 0) {
+        console.error('[batchReviewAction] 记录ID数组不能为空')
+        return false
+      }
+
+      // 转换为数字数组
+      const numericIds = recordIds.map(id => {
+        const numId = typeof id === 'string' ? parseInt(id, 10) : id
+        return isNaN(Number(numId)) ? null : numId
+      }).filter((id): id is number => id !== null)
+
+      if (numericIds.length === 0) {
+        console.error('[batchReviewAction] 没有有效的记录ID')
+        return false
+      }
+
+      const requestData: {
+        action: string
+        record_ids: number[]
+        rejection_reason?: string
+      } = {
+        action: action,
+        record_ids: numericIds
+      }
+
+      // 如果是驳回操作，需要提供驳回理由
+      if (action === 'reject') {
+        if (!rejectionReason || !rejectionReason.trim()) {
+          console.error('[batchReviewAction] 驳回操作必须提供驳回理由')
+          return false
+        }
+        requestData.rejection_reason = rejectionReason.trim()
+      }
+
+      // 接口路径：/api/review/api/review-action/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>(`${API_BASE}/review/api/review-action/`, requestData)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      console.log('[batchReviewAction] 响应数据:', JSON.stringify(result, null, 2))
+
+      // 检查响应格式
+      if (result.code === 200 || result.success === true || (result.data && result.data.success === true)) {
+        console.log('[batchReviewAction] 批量审核操作成功')
+        return true
+      }
+      console.error('[batchReviewAction] 批量审核操作失败: 响应异常', result)
+      return false
+    } catch (error: unknown) {
+      console.error('Batch review action error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+
+        // 处理400错误，提取错误信息
+        if (response?.status === 400 && response?.data) {
+          const errorMessage = response.data.message || response.data.detail || '批量审核操作失败'
+          // 抛出包含错误信息的异常，让调用方可以处理
+          throw new Error(errorMessage)
+        }
+      }
+      throw error
     }
   }
 }
@@ -893,4 +1258,5 @@ export const accountApi = {
     }
   }
 }
+
 
