@@ -278,7 +278,7 @@ const loadLogs = async () => {
 
     // 调用真实API接口
     const fetchedLogs = await logApi.getLogs(params)
-    
+
     // 转换数据格式以匹配 OperationLog 接口
     const convertedLogs: OperationLog[] = fetchedLogs.map((log: any) => {
       return {
@@ -522,27 +522,18 @@ const handleBatchDelete = async () => {
 
     deleting.value = true
 
-    // 获取该月份的所有日志ID
-    const monthLogs = filteredLogs.value.filter(log => {
-      const logDate = new Date(log.timestamp)
-      const logMonth = `${logDate.getFullYear()}-${String(logDate.getMonth() + 1).padStart(2, '0')}`
-      return logMonth === deleteForm.value.month
-    })
+    // 调用删除日志接口（按月份删除）
+    const success = await logApi.deleteLogs(deleteForm.value.month)
 
-    const logIds = monthLogs.map(log => log.id)
-
-    if (logIds.length === 0) {
-      ElMessage.warning('该月份没有可删除的日志')
-      deleting.value = false
-      return
+    if (success) {
+      ElMessage.success(`成功删除 ${deleteLogsCount.value} 条日志`)
+      deleteDialogVisible.value = false
+      deleteForm.value.month = ''
+      // 重新加载日志列表
+      await loadLogs()
+    } else {
+      ElMessage.error('删除失败，请稍后重试')
     }
-
-    // TODO: 对接删除日志接口
-    // const success = await logApi.deleteLogs(logIds, userStore.userId || '', userStore.userId || '未知用户')
-    
-    // 暂时提示功能未实现
-    ElMessage.warning('删除功能待对接接口')
-    deleteDialogVisible.value = false
   } catch {
     // 用户取消
   } finally {

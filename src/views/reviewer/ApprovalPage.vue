@@ -14,6 +14,9 @@ type Registration = {
   type: string
   status: 'pending' | 'approved' | 'rejected'
   rejectReason?: string  // 驳回理由
+  reviewId?: number  // 审核记录ID（用于审核操作，与报名记录ID不同）
+  reviewer?: string  // 审核人
+  reviewTime?: string  // 审核时间
   phone?: string
   email?: string
   // 用户报名表单字段（通用字段）
@@ -299,6 +302,91 @@ function mapDanceRegistration(record: Record<string, any>, index: number): Regis
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapInstrumentalRegistration(record: Record<string, any>, index: number): Registration {
+  const accountId = record?.account || record?.account_id || record?.user_account || record?.created_by?.toString() || `account-${index + 1}`
+  const accountName = record?.account_name || record?.username || record?.school_name || accountId
+  const participants = Array.isArray(record?.participants) ? record.participants : []
+  const teachers = Array.isArray(record?.guide_teachers) ? record.guide_teachers : []
+  const firstParticipant = participants.length > 0 ? participants[0] : null
+  const firstTeacher = teachers.length > 0 ? teachers[0] : null
+
+  // 从第一个参与者或第一个老师获取学校名称
+  const schoolName = firstParticipant?.school_name || firstTeacher?.school_name || record?.school_name || accountName
+
+  // 作品名称
+  const workName = record?.work_title || record?.performance_title || record?.work_description || `器乐作品-${index + 1}`
+
+  const files = []
+  if (record?.work_file) {
+    files.push({
+      name: '作品文件',
+      type: 'file',
+      size: undefined,
+      url: record.work_file
+    })
+  }
+  if (record?.work_file_url) {
+    files.push({
+      name: '作品文件',
+      type: 'file',
+      size: undefined,
+      url: record.work_file_url
+    })
+  }
+
+  if (Array.isArray(record?.attachments)) {
+    record.attachments.forEach((file: { name?: string; size?: number; type?: string; url?: string }) => {
+      files.push({
+        name: file?.name || '附件',
+        type: file?.type,
+        size: file?.size,
+        url: file?.url
+      })
+    })
+  }
+
+  // 获取指导老师（identity === "teacher" 或 "指导教师"）
+  const instructor = teachers.find((t: { identity?: string }) =>
+    t.identity === 'teacher' || t.identity === '指导教师' || t.identity === 'instructor'
+  )
+  // 获取指挥（如果有 conductor 字段）
+  const conductor = record?.conductor
+
+  return {
+    id: String(record?.id ?? record?.uuid ?? `${accountId}-${index + 1}`),
+    accountId,
+    accountName,
+    workName,
+    name: firstParticipant?.name || record?.contact_name || accountName,
+    school: schoolName,
+    type: '器乐报名',
+    status: mapBackendStatus(record?.status),
+    rejectReason: record?.rejection_reason || undefined,
+    phone: record?.contact_phone || firstParticipant?.phone || firstParticipant?.contact_phone,
+    email: record?.contact_email || '',
+    contact: record?.contact_name,
+    address: record?.contact_address,
+    intro: record?.work_description || record?.performance_description,
+    performanceType: record?.performance_type,
+    minutes: Number(record?.duration_minutes ?? 0),
+    seconds: Number(record?.duration_seconds ?? 0),
+    isOriginal: Boolean(record?.is_original ?? false),
+    group: record?.group_type,
+    chorusCount: record?.performer_count,
+    leader: conductor?.conductor_name || conductor?.name || record?.leader_name,
+    tutor: instructor?.name,
+    teachersCount: teachers.length || undefined,
+    membersCount: participants.length || undefined,
+    // 保存完整花名册数据（用于统计）
+    guideTeachers: teachers.length > 0 ? teachers : undefined,
+    participants: participants.length > 0 ? participants : undefined,
+    files: files.length > 0 ? files : undefined,
+    // 保存原始数据
+    rawData: record
+  }
+}
+
 // 单独加载声乐报名（保留以备将来使用）
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const loadVocalRegistrations = async () => {
@@ -339,30 +427,141 @@ const loadDanceRegistrations = async () => {
   }
 }
 
+// 匹配审核记录与报名记录
+function matchReviewRecord(registration: Registration, reviewRecords: any[]): any | null {
+  // 节目类型映射：前端显示名称 -> 后端类型
+  const typeMap: Record<string, string> = {
+    '声乐报名': '声乐',
+    '器乐报名': '器乐',
+    '舞蹈报名': '舞蹈',
+    '戏曲报名': '戏曲',
+    '朗诵报名': '朗诵'
+  }
+
+  const programType = typeMap[registration.type] || registration.type.replace('报名', '').replace('作品', '')
+  const workName = registration.workName || registration.rawData?.work_title || ''
+
+  // 尝试匹配：优先匹配 program_name 和 program_type
+  let matched = reviewRecords.find((review: any) => {
+    const reviewProgramType = review.program_type || ''
+    const reviewProgramName = review.program_name || ''
+
+    // 类型匹配
+    const typeMatch = reviewProgramType === programType ||
+                      reviewProgramType.toLowerCase() === programType.toLowerCase()
+
+    // 名称匹配（允许部分匹配，因为审核记录的名称可能包含额外信息）
+    const nameMatch = reviewProgramName.includes(workName) ||
+                      workName.includes(reviewProgramName) ||
+                      reviewProgramName === workName
+
+    return typeMatch && nameMatch
+  })
+
+  // 如果没找到，尝试只匹配类型和提交时间（如果可用）
+  if (!matched && registration.rawData?.created_at) {
+    const submitTime = new Date(registration.rawData.created_at).toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).replace(/\//g, '-')
+
+    matched = reviewRecords.find((review: any) => {
+      const reviewProgramType = review.program_type || ''
+      const typeMatch = reviewProgramType === programType ||
+                        reviewProgramType.toLowerCase() === programType.toLowerCase()
+      const timeMatch = review.submit_time && review.submit_time.includes(submitTime.split(' ')[0])
+      return typeMatch && timeMatch
+    })
+  }
+
+  return matched || null
+}
+
 const loadAllRegistrations = async () => {
   loading.value = true
   list.value = []
   try {
-    // 并行加载所有类型的报名数据
-    const [vocalData, danceData] = await Promise.all([
-      reviewApi.getVocalRegistrations().catch(err => {
+    // 并行加载所有类型的报名数据和审核记录
+    // 使用统一接口 /api/registrations/all/?program_type=xxx 分别获取各类型报名详情
+    // 使用 /api/review/reviews/ 获取审核状态
+    const [vocalData, danceData, instrumentalData, reviewRecords] = await Promise.all([
+      reviewApi.getAllRegistrations('vocal').catch(err => {
         console.error('[ApprovalPage] 获取声乐报名列表失败:', err)
         return []
       }),
-      reviewApi.getDanceRegistrations().catch(err => {
+      reviewApi.getAllRegistrations('dance').catch(err => {
         console.error('[ApprovalPage] 获取舞蹈报名列表失败:', err)
+        return []
+      }),
+      reviewApi.getAllRegistrations('instrumental').catch(err => {
+        console.error('[ApprovalPage] 获取器乐报名列表失败:', err)
+        return []
+      }),
+      reviewApi.getReviewRecords().catch(err => {
+        console.error('[ApprovalPage] 获取审核记录列表失败:', err)
         return []
       })
     ])
 
     const allRegistrations: Registration[] = []
 
+    // 处理声乐报名数据
     if (Array.isArray(vocalData)) {
       allRegistrations.push(...vocalData.map((item, index) => mapVocalRegistration(item, index)))
     }
 
+    // 处理舞蹈报名数据
     if (Array.isArray(danceData)) {
       allRegistrations.push(...danceData.map((item, index) => mapDanceRegistration(item, index)))
+    }
+
+    // 处理器乐报名数据
+    if (Array.isArray(instrumentalData)) {
+      allRegistrations.push(...instrumentalData.map((item, index) => mapInstrumentalRegistration(item, index)))
+    }
+
+    // 匹配审核记录并更新状态
+    if (Array.isArray(reviewRecords) && reviewRecords.length > 0) {
+      console.log('[ApprovalPage] 开始匹配审核记录，审核记录数量:', reviewRecords.length)
+      allRegistrations.forEach((registration) => {
+        const matchedReview = matchReviewRecord(registration, reviewRecords)
+        if (matchedReview) {
+          // 更新审核记录ID（用于审核操作）
+          registration.reviewId = matchedReview.id
+
+          // 更新状态（审核记录的状态优先级更高）
+          if (matchedReview.status) {
+            const reviewStatus = matchedReview.status.toLowerCase()
+            if (reviewStatus === 'approved') {
+              registration.status = 'approved'
+            } else if (reviewStatus === 'rejected') {
+              registration.status = 'rejected'
+              registration.rejectReason = matchedReview.rejection_reason || matchedReview.reason
+            } else if (reviewStatus === 'pending') {
+              registration.status = 'pending'
+            }
+          }
+
+          // 更新审核信息
+          if (matchedReview.reviewer) {
+            registration.reviewer = matchedReview.reviewer
+          }
+          if (matchedReview.review_time) {
+            registration.reviewTime = matchedReview.review_time
+          }
+
+          console.log('[ApprovalPage] 匹配成功:', {
+            workName: registration.workName,
+            reviewId: matchedReview.id,
+            status: matchedReview.status
+          })
+        }
+      })
     }
 
     list.value = allRegistrations
@@ -412,21 +611,43 @@ async function approveRegistration(id: string) {
     return
   }
 
-  // 从原始数据中获取真实的记录ID（数字类型）
-  const recordId = registration.rawData?.id || parseInt(id, 10)
-  if (!recordId || isNaN(Number(recordId))) {
-    ElMessage.error('无法获取有效的记录ID')
+  // 必须使用审核记录ID（reviewId），审核操作需要审核记录的ID
+  if (!registration.reviewId) {
+    ElMessage.error('无法获取审核记录ID，请刷新页面后重试')
+    console.error('[approveRegistration] 缺少审核记录ID:', {
+      frontendId: id,
+      reviewId: registration.reviewId,
+      workName: registration.workName,
+      type: registration.type
+    })
+    // 刷新列表数据，确保状态同步
+    await loadAllRegistrations()
+    return
+  }
+
+  const numericRecordId = Number(registration.reviewId)
+  if (isNaN(numericRecordId)) {
+    ElMessage.error('审核记录ID格式错误')
+    console.error('[approveRegistration] 无效的审核记录ID:', { reviewId: registration.reviewId })
     return
   }
 
   try {
-    const success = await reviewApi.reviewAction(recordId, 'approve')
+    console.log('[approveRegistration] 准备调用审核接口:', {
+      recordId: numericRecordId,
+      reviewId: registration.reviewId,
+      registrationType: registration.type
+    })
+    // 使用审核记录ID（reviewId），不需要传递 program_type
+    const success = await reviewApi.reviewAction(numericRecordId, 'approve')
     if (success) {
       // 更新本地状态
       list.value = list.value.map(i =>
         i.id === id ? { ...i, status: 'approved', rejectReason: undefined } : i
       )
-      ElMessage.success('审核通过')
+      ElMessage.success('审核通过成功')
+      // 可选：刷新列表数据以确保状态同步（如果需要从服务器获取最新状态）
+      // await loadAllRegistrations()
     } else {
       ElMessage.error('审核操作失败，请稍后重试')
     }
@@ -435,7 +656,12 @@ async function approveRegistration(id: string) {
     // 处理已知的错误信息
     if (error instanceof Error) {
       const errorMessage = error.message
-      if (errorMessage.includes('已审核') || errorMessage.includes('无法重复操作')) {
+      // 检查是否是记录不存在的错误
+      if (errorMessage.includes('审核记录不存在') || errorMessage.includes('记录不存在')) {
+        ElMessage.error('审核记录不存在，请刷新页面后重试')
+        // 刷新列表数据，确保状态同步
+        await loadAllRegistrations()
+      } else if (errorMessage.includes('已审核') || errorMessage.includes('无法重复操作')) {
         ElMessage.warning(errorMessage)
         // 刷新列表数据，确保状态同步
         await loadAllRegistrations()
@@ -480,15 +706,46 @@ async function submitReject() {
     return
   }
 
-  // 从原始数据中获取真实的记录ID（数字类型）
-  const recordId = registration.rawData?.id || parseInt(currentRejectAccount.value, 10)
-  if (!recordId || isNaN(Number(recordId))) {
-    ElMessage.error('无法获取有效的记录ID')
+  // 必须使用审核记录ID（reviewId），审核操作需要审核记录的ID
+  if (!registration.reviewId) {
+    ElMessage.error('无法获取审核记录ID，请刷新页面后重试')
+    console.error('[submitReject] 缺少审核记录ID:', {
+      frontendId: currentRejectAccount.value,
+      reviewId: registration.reviewId,
+      workName: registration.workName,
+      type: registration.type
+    })
+    // 刷新列表数据，确保状态同步
+    await loadAllRegistrations()
+    rejectReasonDialogVisible.value = false
+    rejectReason.value = ''
+    currentRejectAccount.value = null
+    return
+  }
+
+  const recordId = registration.reviewId
+  if (isNaN(Number(recordId))) {
+    ElMessage.error('审核记录ID格式错误')
+    console.error('[submitReject] 无效的审核记录ID:', { recordId, reviewId: registration.reviewId })
+    return
+  }
+
+  // 确保 recordId 是数字类型
+  const numericRecordId = Number(recordId)
+  if (isNaN(numericRecordId)) {
+    ElMessage.error('记录ID格式错误')
+    console.error('[submitReject] 记录ID不是数字:', recordId)
     return
   }
 
   try {
-    const success = await reviewApi.reviewAction(recordId, 'reject', rejectReason.value.trim())
+    console.log('[submitReject] 准备调用审核接口:', {
+      recordId: numericRecordId,
+      reviewId: registration.reviewId,
+      registrationType: registration.type
+    })
+    // 使用审核记录ID（reviewId），不需要传递 program_type
+    const success = await reviewApi.reviewAction(numericRecordId, 'reject', rejectReason.value.trim())
     if (success) {
       // 更新本地状态
       list.value = list.value.map(i =>
@@ -508,7 +765,12 @@ async function submitReject() {
     // 处理已知的错误信息
     if (error instanceof Error) {
       const errorMessage = error.message
-      if (errorMessage.includes('已审核') || errorMessage.includes('无法重复操作')) {
+      // 检查是否是记录不存在的错误
+      if (errorMessage.includes('审核记录不存在') || errorMessage.includes('记录不存在')) {
+        ElMessage.error('审核记录不存在，请刷新页面后重试')
+        // 刷新列表数据，确保状态同步
+        await loadAllRegistrations()
+      } else if (errorMessage.includes('已审核') || errorMessage.includes('无法重复操作')) {
         ElMessage.warning(errorMessage)
         // 刷新列表数据，确保状态同步
         await loadAllRegistrations()
@@ -563,12 +825,17 @@ async function submitBatchReject() {
     const validRegistrations: Registration[] = []
 
     pendingRegistrations.forEach((registration) => {
-      const recordId = registration.rawData?.id || parseInt(registration.id, 10)
-      if (recordId && !isNaN(Number(recordId))) {
-        recordIds.push(recordId)
+      // 必须使用审核记录ID（reviewId），审核操作需要审核记录的ID
+      if (registration.reviewId && !isNaN(Number(registration.reviewId))) {
+        recordIds.push(Number(registration.reviewId))
         validRegistrations.push(registration)
       } else {
-        console.warn('[submitBatchReject] 无效的记录ID:', registration.id)
+        console.warn('[submitBatchReject] 缺少审核记录ID，跳过该记录:', {
+          id: registration.id,
+          reviewId: registration.reviewId,
+          workName: registration.workName,
+          type: registration.type
+        })
       }
     })
 
@@ -633,12 +900,17 @@ async function batchApprove() {
     const validRegistrations: Registration[] = []
 
     pendingRegistrations.forEach((registration) => {
-      const recordId = registration.rawData?.id || parseInt(registration.id, 10)
-      if (recordId && !isNaN(Number(recordId))) {
-        recordIds.push(recordId)
+      // 必须使用审核记录ID（reviewId），审核操作需要审核记录的ID
+      if (registration.reviewId && !isNaN(Number(registration.reviewId))) {
+        recordIds.push(Number(registration.reviewId))
         validRegistrations.push(registration)
       } else {
-        console.warn('[batchApprove] 无效的记录ID:', registration.id)
+        console.warn('[batchApprove] 缺少审核记录ID，跳过该记录:', {
+          id: registration.id,
+          reviewId: registration.reviewId,
+          workName: registration.workName,
+          type: registration.type
+        })
       }
     })
 

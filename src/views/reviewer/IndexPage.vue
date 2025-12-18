@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Download, Upload } from '@element-plus/icons-vue'
-import { reviewApi } from '@/services/api'
+import { reviewApi, registrationApi } from '@/services/api'
 
 // 后端返回的用户统计数据
 interface UserStat {
@@ -28,6 +28,19 @@ type UniversityStats = {
 
 const loading = ref(false)
 const userStats = ref<UserStat[]>([])
+const overallStats = ref<{
+  total_count: number
+  approved_count: number
+  rejected_count: number
+  pending_count: number
+  draft_count: number
+}>({
+  total_count: 0,
+  approved_count: 0,
+  rejected_count: 0,
+  pending_count: 0,
+  draft_count: 0
+})
 
 // 根据审核逻辑：一个大学通过就是整体所有通过，驳回就是整体所有驳回
 // 所以根据状态来计算各数量
@@ -62,8 +75,22 @@ const universityStats = computed(() => {
   })
 })
 
-// 整体统计数据
+// 标记是否已加载整体统计数据
+const overallStatsLoaded = ref(false)
+
+// 整体统计数据（优先使用API返回的整体统计数据）
 const summaryStats = computed(() => {
+  // 如果已经加载了整体统计数据，优先使用API返回的数据（即使为0也要显示）
+  if (overallStatsLoaded.value) {
+    return {
+      total: overallStats.value.total_count,
+      passed: overallStats.value.approved_count,
+      rejected: overallStats.value.rejected_count,
+      pending: overallStats.value.pending_count,
+    }
+  }
+
+  // 否则从各大学统计数据汇总
   const total = universityStats.value.reduce((sum, u) => sum + u.total, 0)
   const passed = universityStats.value.reduce((sum, u) => sum + u.passed, 0)
   const rejected = universityStats.value.reduce((sum, u) => sum + u.rejected, 0)
@@ -237,9 +264,43 @@ function submitStampedForm() {
   // TODO: 实现提交逻辑
 }
 
+// 加载整体报名统计数据
+const loadOverallStats = async () => {
+  try {
+    console.log('[IndexPage] 开始加载整体报名统计数据')
+    const data = await registrationApi.getStats()
+    console.log('[IndexPage] 获取到的整体报名统计数据（原始）:', data)
+    console.log('[IndexPage] 数据类型:', typeof data)
+    console.log('[IndexPage] 数据是否为对象:', data && typeof data === 'object')
+
+    if (data && typeof data === 'object') {
+      const newStats = {
+        total_count: Number(data.total_count) || 0,
+        approved_count: Number(data.approved_count) || 0,
+        rejected_count: Number(data.rejected_count) || 0,
+        pending_count: Number(data.pending_count) || 0,
+        draft_count: Number(data.draft_count) || 0
+      }
+
+      console.log('[IndexPage] 准备更新的统计数据:', newStats)
+      overallStats.value = newStats
+      // 标记已加载，即使数据为0也要使用API返回的数据
+      overallStatsLoaded.value = true
+      console.log('[IndexPage] 整体统计数据已更新:', overallStats.value)
+      console.log('[IndexPage] summaryStats 计算后的值:', summaryStats.value)
+      console.log('[IndexPage] summaryTableData 计算后的值:', summaryTableData.value)
+    } else {
+      console.warn('[IndexPage] 数据格式不正确，data:', data)
+    }
+  } catch (error) {
+    console.error('[IndexPage] 加载整体报名统计数据失败:', error)
+    // 不显示错误提示，因为这只是整体统计，不影响页面主要功能
+    overallStatsLoaded.value = false
+  }
+}
+
 // 加载用户统计数据
 const loadUserStats = async () => {
-  loading.value = true
   try {
     console.log('[IndexPage] 开始加载用户统计数据')
     const data = await reviewApi.getUserStats()
@@ -248,6 +309,20 @@ const loadUserStats = async () => {
   } catch (error) {
     console.error('[IndexPage] 加载用户统计数据失败:', error)
     ElMessage.error('加载统计数据失败，请稍后重试')
+  }
+}
+
+// 加载所有数据
+const loadAllData = async () => {
+  loading.value = true
+  try {
+    // 并行加载整体统计数据和用户统计数据
+    await Promise.all([
+      loadOverallStats(),
+      loadUserStats()
+    ])
+  } catch (error) {
+    console.error('[IndexPage] 加载数据失败:', error)
   } finally {
     loading.value = false
   }
@@ -255,7 +330,7 @@ const loadUserStats = async () => {
 
 // 组件挂载时加载数据
 onMounted(() => {
-  loadUserStats()
+  loadAllData()
 })
 
 // 导出统计表

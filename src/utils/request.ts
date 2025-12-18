@@ -60,7 +60,23 @@ function createAxiosInstance(baseURL: string): AxiosInstance {
         }
       }
 
-      // 如果后端直接返回数据（没有 code 字段），直接返回
+      // 如果后端返回的数据有 success 字段，按 success 字段处理
+      if (res && typeof res === 'object' && 'success' in res) {
+        if (res.success === true) {
+          // 成功：返回统一格式 { code: 200, message: "...", data: [...] }
+          return {
+            code: 200,
+            message: res.message || 'success',
+            data: res.data
+          }
+        } else {
+          // 失败：显示错误信息
+          ElMessage.error(res.message || '请求失败')
+          return Promise.reject(new Error(res.message || '请求失败'))
+        }
+      }
+
+      // 如果后端直接返回数据（没有 code 或 success 字段），直接返回
       // 这种情况通常表示请求成功
       return { code: 200, message: 'success', data: res }
     },
@@ -94,7 +110,18 @@ function createAxiosInstance(baseURL: string): AxiosInstance {
             ElMessage.error('没有权限访问')
             break
           case 404:
-            ElMessage.error('请求的资源不存在')
+            // 404错误：检查后端是否返回了具体的错误消息
+            const notFoundData = error.response.data
+            const notFoundMessage = notFoundData?.message || notFoundData?.detail || '请求的资源不存在'
+            console.error('404 错误详情:', {
+              status: error.response.status,
+              data: notFoundData,
+              url: error.config?.url,
+              method: error.config?.method,
+              requestData: error.config?.data ? (typeof error.config.data === 'string' ? JSON.parse(error.config.data) : error.config.data) : null
+            })
+            // 不在这里显示错误消息，让调用方处理（因为可能需要在特定位置显示）
+            // ElMessage.error(notFoundMessage)
             break
           case 500:
             // 服务器内部错误，显示更详细的错误信息
@@ -129,7 +156,7 @@ function createAxiosInstance(baseURL: string): AxiosInstance {
 // 默认实例（可根据环境变量配置 baseURL）
 // 开发环境：使用相对路径，通过 Vite 代理转发
 // 生产环境：使用完整 URL
-const baseURL = import.meta.env.DEV 
+const baseURL = import.meta.env.DEV
   ? '' // 开发环境使用相对路径，通过 Vite 代理
   : (import.meta.env.VITE_API_BASE_URL || 'http://g97bda64.natappfree.cc')
 export const request = createAxiosInstance(baseURL)
@@ -238,7 +265,7 @@ export function uploadFile<T = any>(
     // 所以这里需要检查 data 中是否包含 success 字段
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const responseData = res as any
-    
+
     // 如果响应拦截器已经包装了，data 字段会包含原始响应
     if (responseData.data && typeof responseData.data === 'object' && 'success' in responseData.data) {
       // 提取原始响应中的 data 字段
@@ -249,7 +276,7 @@ export function uploadFile<T = any>(
         data: originalData.data
       } as ApiResponse<T>
     }
-    
+
     // 如果响应中直接有 success 字段（响应拦截器未处理的情况）
     if (responseData.success !== undefined && !('code' in responseData)) {
       return {
@@ -258,7 +285,7 @@ export function uploadFile<T = any>(
         data: responseData.data
       } as ApiResponse<T>
     }
-    
+
     return res
   })
 }

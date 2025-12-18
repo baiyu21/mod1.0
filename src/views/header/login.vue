@@ -6,8 +6,11 @@
 -->
 <script setup lang="ts">
 import { defineOptions } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import { useUserStore } from '@/stores/user'
 import { commonRules } from '@/composables/useForm'
+import type { UserRole } from '@/types'
 
 /**
  * 定义组件名称
@@ -16,6 +19,9 @@ import { commonRules } from '@/composables/useForm'
 defineOptions({
   name: 'LoginPage',
 })
+
+const router = useRouter()
+const userStore = useUserStore()
 
 /**
  * 使用封装的认证组合式函数
@@ -63,6 +69,34 @@ const onSubmit = async () => {
 const handleReset = () => {
   resetLoginForm()
 }
+
+/**
+ * 测试登录 - 绕过路由守卫直接访问对应端
+ * @function handleTestLogin
+ * @description 模拟登录状态，直接跳转到指定端的首页（用于测试，无需后端）
+ * @param {UserRole} role - 用户角色
+ * @returns {void}
+ */
+const handleTestLogin = (role: UserRole) => {
+  // 模拟登录状态
+  userStore.login({
+    userId: `test-${role}`,
+    role: role,
+    token: `test-token-${role}`,
+    refreshToken: `test-refresh-${role}`,
+    permissions: []
+  })
+
+  // 根据角色跳转到对应首页
+  const roleRoutes: Record<UserRole, string> = {
+    'user': '/user',
+    'approval': '/approval',
+    'admin': '/admin',
+    'logaudit': '/logaudit'
+  }
+
+  router.push(roleRoutes[role])
+}
 </script>
 
 <template>
@@ -104,6 +138,23 @@ const handleReset = () => {
           <div class="hint-password">密码均为 <strong>Tsy123456</strong></div>
           <div class="hint-role" style="margin-top: 0.5rem; font-size: 0.75rem; color: #909399;">
             （用户端 | 管理员端 | 审核端 | 日志端）
+          </div>
+        </div>
+        <div class="test-buttons">
+          <div class="test-title">测试入口（无需后端）</div>
+          <div class="test-buttons-group">
+            <el-button type="success" size="small" @click="handleTestLogin('user')">
+              用户端
+            </el-button>
+            <el-button type="warning" size="small" @click="handleTestLogin('approval')">
+              审核端
+            </el-button>
+            <el-button type="danger" size="small" @click="handleTestLogin('admin')">
+              管理员端
+            </el-button>
+            <el-button type="info" size="small" @click="handleTestLogin('logaudit')">
+              日志端
+            </el-button>
           </div>
         </div>
       </el-card>
@@ -244,6 +295,32 @@ const handleReset = () => {
           text-align: center;
           font-size: 0.8125rem;
           color: #606266;
+        }
+      }
+
+      // 测试按钮区域样式
+      .test-buttons {
+        margin-top: 1.25rem;
+        padding: 1.25rem;
+        background: #fff3cd;
+        border-radius: 0.25rem;
+        border: 1px solid #ffc107;
+
+        // 测试标题样式
+        .test-title {
+          font-size: 0.8125rem;
+          font-weight: 600;
+          margin-bottom: 0.75rem;
+          text-align: center;
+          color: #856404;
+        }
+
+        // 测试按钮组样式
+        .test-buttons-group {
+          display: flex;
+          justify-content: center;
+          gap: 0.5rem;
+          flex-wrap: wrap;
         }
       }
     }

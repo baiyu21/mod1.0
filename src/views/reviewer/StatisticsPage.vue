@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
+import { reviewApi } from '@/services/api'
 
 type Registration = {
   id: string
@@ -49,13 +50,17 @@ type Registration = {
   membersCount?: number  // 成员数量
   accompCount?: number  // 伴奏数量
   // 上传文件（显示文件名列表）
-  files?: Array<{ name: string; size?: number; type?: string }>  // 上传的文件
+  files?: Array<{ name: string; size?: number; type?: string; url?: string }>  // 上传的文件
+  // 原始数据（用于详情展示）
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rawData?: any  // 保存原始后端数据
 }
 
 const keyword = ref('')
 const filterType = ref<string>('')
 const registrationDetailVisible = ref(false)
 const currentDetail = ref<Registration | null>(null)
+const loading = ref(false)
 
 // 导出功能
 const exportMaterialType = ref<string>('')
@@ -85,282 +90,315 @@ const typeOptions = [
 const currentPage = ref(1)
 const pageSize = ref(10)
 
-const list = ref<Registration[]>([
-  {
-    id: '1',
-    accountId: 'account001',
-    accountName: 'A大学',
-    workName: '春天来了',
-    name: '张三',
-    school: 'A大学',
+// 后端数据转换
+function mapBackendStatus(status: string | undefined | null): Registration['status'] {
+  const value = typeof status === 'string' ? status.toLowerCase() : ''
+  if (['approved', 'pass', 'passed', '已通过'].includes(value)) {
+    return 'approved'
+  }
+  if (['rejected', 'reject', '已驳回', 'failed'].includes(value)) {
+    return 'rejected'
+  }
+  return 'pending'
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapVocalRegistration(record: Record<string, any>, index: number): Registration {
+  const accountId = record?.account || record?.account_id || record?.user_account || record?.created_by?.toString() || `account-${index + 1}`
+  const accountName = record?.account_name || record?.username || record?.school_name || accountId
+  const participants = Array.isArray(record?.participants) ? record.participants : []
+  const teachers = Array.isArray(record?.guide_teachers) ? record.guide_teachers : []
+  const firstParticipant = participants.length > 0 ? participants[0] : null
+  const firstTeacher = teachers.length > 0 ? teachers[0] : null
+  const schoolName = firstParticipant?.school_name || firstTeacher?.school_name || record?.school_name || accountName
+  const workName = record?.song1_title || record?.work_title || record?.performance_title || record?.song2_title || record?.performance_description || `声乐节目-${index + 1}`
+
+  const files = []
+  if (record?.performance_video) {
+    files.push({ name: '表演视频', type: 'video', size: undefined, url: record.performance_video })
+  }
+  if (Array.isArray(record?.attachments)) {
+    record.attachments.forEach((file: { name?: string; size?: number; type?: string; url?: string }) => {
+      files.push({ name: file?.name || '附件', type: file?.type, size: file?.size, url: file?.url })
+    })
+  }
+
+  const instructor = teachers.find((t: { identity?: string }) => t.identity === 'teacher')
+  const conductor = teachers.find((t: { identity?: string }) => t.identity === 'conductor')
+
+  return {
+    id: String(record?.id ?? record?.uuid ?? `${accountId}-${index + 1}`),
+    accountId,
+    accountName,
+    workName,
+    name: firstParticipant?.name || record?.contact_name || accountName,
+    school: schoolName,
     type: '声乐报名',
-    status: 'pending',
-    phone: '13800138000',
-    email: 'zhangsan@example.com',
-    contact: '张老师',
-    address: '北京市',
-    performanceType: '合唱',
-    minutes: 5,
-    seconds: 30,
-    isOriginal: false,
-    group: 'A组',
-    song1: '春天来了',
-    song2: '夏日之歌',
-    song1HasChinese: true,
-    song2HasChinese: true,
-    song1IsOriginal: false,
-    song2IsOriginal: false,
-    chorusCount: 40,
-    pianoAccompanist: 'teacher',
-    leader: '李老师',
-    tutor: '王老师',
-    intro: '这是一首关于春天的合唱作品，展现了春天的美好景象和人们对春天的向往。',
-    teachersCount: 2,
-    membersCount: 40,
-    accompCount: 1,
-    files: [
-      { name: '作品音频.mp3', size: 5120000 },
-      { name: '作品视频.mp4', size: 25600000 },
-      { name: '曲谱.pdf', size: 1024000 }
-    ]
-  },
-  {
-    id: '4',
-    accountId: 'account001',
-    accountName: 'A大学',
-    workName: '月光曲',
-    name: '张三同学2',
-    school: 'A大学',
-    type: '器乐报名',
-    status: 'pending',
-    phone: '13800138001',
-    email: 'zhangsan2@example.com',
-    contact: '张老师',
-    address: '北京市',
-    performanceType: '独奏',
-    minutes: 4,
-    seconds: 15,
-    isOriginal: false,
-    group: 'B组',
-    intro: '经典器乐合奏作品，以月光为主题，表现夜晚的宁静与美好。',
-    teachersCount: 1,
-    membersCount: 1,
-    files: [
-      { name: '演奏视频.mp4', size: 30000000 }
-    ]
-  },
-  {
-    id: '2',
-    accountId: 'account002',
-    accountName: 'B大学',
-    workName: '舞蹈风采',
-    name: '李四',
-    school: 'B大学',
+    status: mapBackendStatus(record?.status),
+    rejectReason: record?.rejection_reason || undefined,
+    phone: record?.contact_phone || firstParticipant?.contact_phone || firstParticipant?.phone,
+    email: record?.contact_email || '',
+    contact: record?.contact_name,
+    address: record?.contact_address,
+    intro: record?.performance_description || record?.work_description,
+    performanceType: record?.performance_type,
+    minutes: Number(record?.duration_minutes ?? 0),
+    seconds: Number(record?.duration_seconds ?? 0),
+    isOriginal: Boolean(record?.song1_is_original ?? record?.is_original ?? false),
+    group: record?.group_type,
+    song1: record?.song1_title,
+    song2: record?.song2_title,
+    song1HasChinese: record?.song1_is_chinese,
+    song2HasChinese: record?.song2_is_chinese,
+    song1IsOriginal: record?.song1_is_original,
+    song2IsOriginal: record?.song2_is_original,
+    chorusCount: record?.performer_count,
+    pianoAccompanist: record?.piano_accompaniment,
+    leader: conductor?.name || record?.leader_name,
+    tutor: instructor?.name,
+    teachersCount: teachers.length || undefined,
+    membersCount: participants.length || undefined,
+    files: files.length > 0 ? files : undefined,
+    rawData: record
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapDanceRegistration(record: Record<string, any>, index: number): Registration {
+  const accountId = record?.account || record?.account_id || record?.user_account || record?.created_by?.toString() || `account-${index + 1}`
+  const accountName = record?.account_name || record?.username || record?.school_name || accountId
+  const participants = Array.isArray(record?.participants) ? record.participants : []
+  const teachers = Array.isArray(record?.guide_teachers) ? record.guide_teachers : []
+  const firstParticipant = participants.length > 0 ? participants[0] : null
+  const firstTeacher = teachers.length > 0 ? teachers[0] : null
+  const schoolName = firstParticipant?.school_name || firstTeacher?.school_name || record?.school_name || accountName
+  const workName = record?.work_title || record?.performance_title || record?.work_description || `舞蹈作品-${index + 1}`
+
+  const files = []
+  if (record?.work_file) {
+    files.push({ name: '作品文件', type: 'file', size: undefined, url: record.work_file })
+  }
+  if (record?.work_file_url) {
+    files.push({ name: '作品文件', type: 'file', size: undefined, url: record.work_file_url })
+  }
+  if (Array.isArray(record?.attachments)) {
+    record.attachments.forEach((file: { name?: string; size?: number; type?: string; url?: string }) => {
+      files.push({ name: file?.name || '附件', type: file?.type, size: file?.size, url: file?.url })
+    })
+  }
+
+  const instructor = teachers.find((t: { identity?: string }) =>
+    t.identity === '指导教师' || t.identity === 'teacher' || t.identity === 'instructor'
+  )
+
+  return {
+    id: String(record?.id ?? record?.uuid ?? `${accountId}-${index + 1}`),
+    accountId,
+    accountName,
+    workName,
+    name: firstParticipant?.name || record?.contact_name || accountName,
+    school: schoolName,
     type: '舞蹈报名',
-    status: 'pending',
-    phone: '13900139000',
-    email: 'lisi@example.com',
-    contact: '李老师',
-    address: '上海市',
-    performanceType: '群舞',
-    minutes: 6,
-    seconds: 0,
-    isOriginal: true,
-    group: 'A组',
-    intro: '展现校园生活的舞蹈作品，动作优美，编排新颖。',
-    teachersCount: 1,
-    membersCount: 36,
-    files: [
-      { name: '舞蹈视频.mp4', size: 50000000 }
-    ]
-  },
-  {
-    id: '3',
-    accountId: 'account003',
-    accountName: 'C大学',
-    workName: '戏曲选段',
-    name: '王五',
-    school: 'C大学',
-    type: '戏曲报名',
-    status: 'approved',
-    phone: '13700137000',
-    email: 'wangwu@example.com',
-    contact: '王老师',
-    address: '广东省',
-    performanceType: '传统戏曲',
-    minutes: 7,
-    seconds: 30,
-    isOriginal: false,
-    group: 'A组',
-    intro: '经典戏曲选段，传承传统文化艺术。',
-    teachersCount: 1,
-    membersCount: 8,
-    files: [
-      { name: '戏曲表演视频.mp4', size: 40000000 }
-    ]
-  },
-  {
-    id: '5',
-    accountId: 'account004',
-    accountName: 'D大学',
-    workName: '经典朗诵',
-    name: '赵六',
-    school: 'D大学',
-    type: '朗诵报名',
-    status: 'pending',
-    phone: '13600136000',
-    email: 'zhaoliu@example.com',
-    contact: '赵老师',
-    address: '江苏省',
-    performanceType: '集体朗诵',
-    minutes: 5,
-    seconds: 0,
-    isOriginal: true,
-    group: 'A组',
-    intro: '优美的朗诵作品，展现语言艺术魅力。',
-    teachersCount: 1,
-    membersCount: 15,
-    files: [
-      { name: '朗诵视频.mp4', size: 35000000 }
-    ]
-  },
-  {
-    id: '6',
-    accountId: 'account005',
-    accountName: 'E大学',
-    workName: '书法佳作',
-    name: '孙七',
-    school: 'E大学',
-    type: '书法作品',
-    status: 'pending',
-    phone: '13500135000',
-    email: 'sunqi@example.com',
-    contact: '孙老师',
-    address: '浙江省',
-    intro: '优秀的书法作品，展现传统书法艺术。',
-    files: [
-      { name: '书法作品.jpg', size: 2048000 }
-    ]
-  },
-  {
-    id: '7',
-    accountId: 'account006',
-    accountName: 'F大学',
-    workName: '山水画',
-    name: '周八',
-    school: 'F大学',
-    type: '绘画作品',
-    status: 'approved',
-    phone: '13400134000',
-    email: 'zhouba@example.com',
-    contact: '周老师',
-    address: '四川省',
-    intro: '精美的山水画作品，展现中国画的魅力。',
-    files: [
-      { name: '绘画作品.jpg', size: 3072000 }
-    ]
-  },
-  {
-    id: '8',
-    accountId: 'account007',
-    accountName: 'G大学',
-    workName: '海报设计',
-    name: '吴九',
-    school: 'G大学',
-    type: '设计作品',
-    status: 'pending',
-    phone: '13300133000',
-    email: 'wujiu@example.com',
-    contact: '吴老师',
-    address: '湖北省',
-    intro: '创新的海报设计作品，展现设计艺术。',
-    files: [
-      { name: '设计作品.pdf', size: 4096000 }
-    ]
-  },
-  {
-    id: '9',
-    accountId: 'account008',
-    accountName: 'H大学',
-    workName: '校园风光',
-    name: '郑十',
-    school: 'H大学',
-    type: '摄影作品',
-    status: 'pending',
-    phone: '13200132000',
-    email: 'zhengshi@example.com',
-    contact: '郑老师',
-    address: '湖南省',
-    intro: '精美的摄影作品，展现校园美丽风光。',
-    files: [
-      { name: '摄影作品.jpg', size: 5120000 }
-    ]
-  },
-  {
-    id: '10',
-    accountId: 'account009',
-    accountName: 'I大学',
-    workName: '校园故事',
-    name: '钱十一',
-    school: 'I大学',
-    type: '微电影作品',
-    status: 'approved',
-    phone: '13100131000',
-    email: 'qianshiyi@example.com',
-    contact: '钱老师',
-    address: '河南省',
-    intro: '感人的校园微电影，展现青春故事。',
-    files: [
-      { name: '微电影.mp4', size: 102400000 }
-    ]
-  },
-  {
-    id: '11',
-    accountId: 'account010',
-    accountName: 'J大学',
-    workName: '艺术工作坊',
-    name: '孙十二',
-    school: 'J大学',
-    type: '艺术实践工作坊报名',
-    status: 'pending',
-    phone: '13000130000',
-    email: 'sunshier@example.com',
-    contact: '孙老师',
-    address: '山东省',
-    intro: '创新的艺术实践工作坊，展现艺术教育新形式。',
-    teachersCount: 3,
-    membersCount: 20,
-    files: [
-      { name: '工作坊方案.pdf', size: 2048000 },
-      { name: '活动照片.jpg', size: 3072000 }
-    ]
-  },
-  {
-    id: '12',
-    accountId: 'account011',
-    accountName: 'K大学',
-    workName: '美育改革创新案例',
-    name: '李十三',
-    school: 'K大学',
-    type: '美育改革创新优秀案例申报',
-    status: 'pending',
-    phone: '12900129000',
-    email: 'lishisan@example.com',
-    caseName: '高校美育改革创新优秀案例',
-    leaderName: '李教授',
-    leaderTitle: '教授',
-    caseCode: 'CASE002',
-    submitUnit: 'K大学',
-    leaderUnit: 'K大学音乐学院',
-    leaderPhone: '12900129000',
-    category: '高校美育教师队伍建设',
-    intro: '这是一个关于高校美育教师队伍建设的优秀案例。',
-    files: [
-      { name: '案例正文.pdf', size: 2048000 },
-      { name: '附件材料1.pdf', size: 1536000 }
-    ]
-  },
-])
+    status: mapBackendStatus(record?.status),
+    rejectReason: record?.rejection_reason || undefined,
+    phone: record?.contact_phone || firstParticipant?.phone || firstParticipant?.contact_phone,
+    email: record?.contact_email || '',
+    contact: record?.contact_name,
+    address: record?.contact_address,
+    intro: record?.work_description || record?.performance_description,
+    performanceType: record?.performance_type,
+    minutes: Number(record?.duration_minutes ?? 0),
+    seconds: Number(record?.duration_seconds ?? 0),
+    isOriginal: Boolean(record?.is_original ?? false),
+    group: record?.group_type,
+    chorusCount: record?.performer_count,
+    tutor: instructor?.name,
+    teachersCount: teachers.length || undefined,
+    membersCount: participants.length || undefined,
+    files: files.length > 0 ? files : undefined,
+    rawData: record
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapInstrumentalRegistration(record: Record<string, any>, index: number): Registration {
+  const accountId = record?.account || record?.account_id || record?.user_account || record?.created_by?.toString() || `account-${index + 1}`
+  const accountName = record?.account_name || record?.username || record?.school_name || accountId
+  const participants = Array.isArray(record?.participants) ? record.participants : []
+  const teachers = Array.isArray(record?.guide_teachers) ? record.guide_teachers : []
+  const firstParticipant = participants.length > 0 ? participants[0] : null
+  const firstTeacher = teachers.length > 0 ? teachers[0] : null
+  const schoolName = firstParticipant?.school_name || firstTeacher?.school_name || record?.school_name || accountName
+  const workName = record?.work_title || record?.performance_title || record?.work_description || `器乐作品-${index + 1}`
+
+  const files = []
+  if (record?.work_file) {
+    files.push({ name: '作品文件', type: 'file', size: undefined, url: record.work_file })
+  }
+  if (record?.work_file_url) {
+    files.push({ name: '作品文件', type: 'file', size: undefined, url: record.work_file_url })
+  }
+  if (Array.isArray(record?.attachments)) {
+    record.attachments.forEach((file: { name?: string; size?: number; type?: string; url?: string }) => {
+      files.push({ name: file?.name || '附件', type: file?.type, size: file?.size, url: file?.url })
+    })
+  }
+
+  const instructor = teachers.find((t: { identity?: string }) =>
+    t.identity === 'teacher' || t.identity === '指导教师' || t.identity === 'instructor'
+  )
+  const conductor = record?.conductor
+
+  return {
+    id: String(record?.id ?? record?.uuid ?? `${accountId}-${index + 1}`),
+    accountId,
+    accountName,
+    workName,
+    name: firstParticipant?.name || record?.contact_name || accountName,
+    school: schoolName,
+    type: '器乐报名',
+    status: mapBackendStatus(record?.status),
+    rejectReason: record?.rejection_reason || undefined,
+    phone: record?.contact_phone || firstParticipant?.phone || firstParticipant?.contact_phone,
+    email: record?.contact_email || '',
+    contact: record?.contact_name,
+    address: record?.contact_address,
+    intro: record?.work_description || record?.performance_description,
+    performanceType: record?.performance_type,
+    minutes: Number(record?.duration_minutes ?? 0),
+    seconds: Number(record?.duration_seconds ?? 0),
+    isOriginal: Boolean(record?.is_original ?? false),
+    group: record?.group_type,
+    chorusCount: record?.performer_count,
+    leader: conductor?.conductor_name || conductor?.name || record?.leader_name,
+    tutor: instructor?.name,
+    teachersCount: teachers.length || undefined,
+    membersCount: participants.length || undefined,
+    files: files.length > 0 ? files : undefined,
+    rawData: record
+  }
+}
+
+// 匹配审核记录与报名记录
+function matchReviewRecord(registration: Registration, reviewRecords: any[]): any | null {
+  const typeMap: Record<string, string> = {
+    '声乐报名': '声乐',
+    '器乐报名': '器乐',
+    '舞蹈报名': '舞蹈',
+    '戏曲报名': '戏曲',
+    '朗诵报名': '朗诵'
+  }
+
+  const programType = typeMap[registration.type] || registration.type.replace('报名', '').replace('作品', '')
+  const workName = registration.workName || registration.rawData?.work_title || ''
+
+  let matched = reviewRecords.find((review: any) => {
+    const reviewProgramType = review.program_type || ''
+    const reviewProgramName = review.program_name || ''
+    const typeMatch = reviewProgramType === programType || reviewProgramType.toLowerCase() === programType.toLowerCase()
+    const nameMatch = reviewProgramName.includes(workName) || workName.includes(reviewProgramName) || reviewProgramName === workName
+    return typeMatch && nameMatch
+  })
+
+  if (!matched && registration.rawData?.created_at) {
+    const submitTime = new Date(registration.rawData.created_at).toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).replace(/\//g, '-')
+
+    matched = reviewRecords.find((review: any) => {
+      const reviewProgramType = review.program_type || ''
+      const typeMatch = reviewProgramType === programType || reviewProgramType.toLowerCase() === programType.toLowerCase()
+      const timeMatch = review.submit_time && review.submit_time.includes(submitTime.split(' ')[0])
+      return typeMatch && timeMatch
+    })
+  }
+
+  return matched || null
+}
+
+const list = ref<Registration[]>([])
+
+// 加载所有报名数据
+const loadAllRegistrations = async () => {
+  loading.value = true
+  try {
+    // 并行加载所有类型的报名数据和审核记录
+    const [vocalData, danceData, instrumentalData, reviewRecords] = await Promise.all([
+      reviewApi.getAllRegistrations('vocal').catch(err => {
+        console.error('[StatisticsPage] 获取声乐报名列表失败:', err)
+        return []
+      }),
+      reviewApi.getAllRegistrations('dance').catch(err => {
+        console.error('[StatisticsPage] 获取舞蹈报名列表失败:', err)
+        return []
+      }),
+      reviewApi.getAllRegistrations('instrumental').catch(err => {
+        console.error('[StatisticsPage] 获取器乐报名列表失败:', err)
+        return []
+      }),
+      reviewApi.getReviewRecords().catch(err => {
+        console.error('[StatisticsPage] 获取审核记录列表失败:', err)
+        return []
+      })
+    ])
+
+    const allRegistrations: Registration[] = []
+
+    // 处理声乐报名数据
+    if (Array.isArray(vocalData)) {
+      allRegistrations.push(...vocalData.map((item, index) => mapVocalRegistration(item, index)))
+    }
+
+    // 处理舞蹈报名数据
+    if (Array.isArray(danceData)) {
+      allRegistrations.push(...danceData.map((item, index) => mapDanceRegistration(item, index)))
+    }
+
+    // 处理器乐报名数据
+    if (Array.isArray(instrumentalData)) {
+      allRegistrations.push(...instrumentalData.map((item, index) => mapInstrumentalRegistration(item, index)))
+    }
+
+    // 匹配审核记录并更新状态
+    if (Array.isArray(reviewRecords) && reviewRecords.length > 0) {
+      allRegistrations.forEach((registration) => {
+        const matchedReview = matchReviewRecord(registration, reviewRecords)
+        if (matchedReview) {
+          // 更新状态（审核记录的状态优先级更高）
+          if (matchedReview.status) {
+            const reviewStatus = matchedReview.status.toLowerCase()
+            if (reviewStatus === 'approved') {
+              registration.status = 'approved'
+            } else if (reviewStatus === 'rejected') {
+              registration.status = 'rejected'
+              registration.rejectReason = matchedReview.rejection_reason || matchedReview.reason
+            } else if (reviewStatus === 'pending') {
+              registration.status = 'pending'
+            }
+          }
+        }
+      })
+    }
+
+    list.value = allRegistrations
+  } catch (error) {
+    console.error('[StatisticsPage] 加载报名列表失败:', error)
+    ElMessage.error('加载报名数据失败，请稍后重试')
+    list.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadAllRegistrations()
+})
 
 // 筛选后的报名列表（按节目显示）
 const filteredRegistrations = computed(() => {
@@ -422,6 +460,13 @@ function formatFileSize(bytes: number): string {
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
+// 打开文件链接
+function openFileUrl(url: string) {
+  if (url) {
+    window.open(url, '_blank')
+  }
 }
 
 // 导出报名信息
@@ -522,6 +567,7 @@ function exportMaterials() {
         :data="paginatedRegistrations"
         stripe
         row-key="id"
+        v-loading="loading"
       >
         <el-table-column type="index" label="序号" width="80" :index="(index: number) => (currentPage - 1) * pageSize + index + 1" />
         <el-table-column prop="accountName" label="大学名称" min-width="200" />
@@ -700,7 +746,14 @@ function exportMaterials() {
       <div v-if="currentDetail.files && currentDetail.files.length > 0" style="margin-top: 20px">
         <h4>上传文件</h4>
         <el-table :data="currentDetail.files" border size="small" max-height="200">
-          <el-table-column prop="name" label="文件名" min-width="200" />
+          <el-table-column prop="name" label="文件名" min-width="200">
+            <template #default="{ row }">
+              <a v-if="row.url" :href="row.url" target="_blank" style="color: #409EFF; text-decoration: none;">
+                {{ row.name }}
+              </a>
+              <span v-else>{{ row.name }}</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="type" label="文件类型" width="120">
             <template #default="{ row }">
               {{ row.type || '未知' }}
@@ -709,6 +762,13 @@ function exportMaterials() {
           <el-table-column label="文件大小" width="120">
             <template #default="{ row }">
               {{ row.size ? formatFileSize(row.size) : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="100">
+            <template #default="{ row }">
+              <el-button v-if="row.url" type="primary" size="small" link @click="openFileUrl(row.url)">
+                查看
+              </el-button>
             </template>
           </el-table-column>
         </el-table>

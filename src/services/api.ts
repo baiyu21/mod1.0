@@ -1,4 +1,4 @@
-import { post, get, put, del, uploadFile as uploadFileRequest } from '@/utils/request'
+import { post, get, put, del, uploadFile as uploadFileRequest, request } from '@/utils/request'
 import { ElMessage } from 'element-plus'
 import type { UserRole, OperationLog, AuditRecord, Registration, RegistrationStatus } from '@/types'
 
@@ -704,11 +704,102 @@ export const registrationApi = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getStats: async (regionFilter?: string): Promise<any> => {
     try {
+      console.log('[getStats] 请求报名统计数据', regionFilter ? `地区: ${regionFilter}` : '')
       const params = regionFilter ? { region: regionFilter } : {}
-      const response = await get(`${API_BASE}/registrations/stats/`, params)
-      return response.data || {}
-    } catch (error) {
+      // 接口路径：/api/registrations/stats/
+      // 直接使用 axios 获取原始响应，确保能正确解析数据
+      const axios = (await import('axios')).default
+      const { getUserToken } = await import('@/utils/storage')
+      try {
+        const token = getUserToken()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rawResponse = await axios.get(`${API_BASE}/registrations/stats/`, {
+          params,
+          headers: token ? {
+            'Authorization': `Bearer ${token}`
+          } : {}
+        })
+        console.log('[getStats] 原始响应数据:', rawResponse.data)
+        console.log('[getStats] 原始响应数据类型:', typeof rawResponse.data)
+
+        // 处理原始响应数据
+        let statsData: any = null
+
+        // 如果后端返回的是对象，检查 data 字段
+        if (rawResponse.data && typeof rawResponse.data === 'object') {
+          // 检查是否有 success 字段和 data 字段
+          if (rawResponse.data.success === true && rawResponse.data.data && typeof rawResponse.data.data === 'object') {
+            statsData = rawResponse.data.data
+            console.log('[getStats] ✅ 从 rawResponse.data.data 提取统计数据（success格式）')
+            console.log('[getStats] 统计数据内容:', statsData)
+            return statsData
+          }
+
+          // 如果 data 字段直接包含统计字段
+          if (rawResponse.data.data && typeof rawResponse.data.data === 'object' && ('total_count' in rawResponse.data.data || 'approved_count' in rawResponse.data.data)) {
+            statsData = rawResponse.data.data
+            console.log('[getStats] ✅ 从 rawResponse.data.data 提取统计数据')
+            console.log('[getStats] 统计数据内容:', statsData)
+            return statsData
+          }
+
+          // 如果原始响应本身包含统计字段
+          if ('total_count' in rawResponse.data || 'approved_count' in rawResponse.data || 'rejected_count' in rawResponse.data || 'pending_count' in rawResponse.data) {
+            statsData = rawResponse.data
+            console.log('[getStats] ✅ rawResponse.data 本身就是统计数据对象')
+            console.log('[getStats] 统计数据内容:', statsData)
+            return statsData
+          }
+
+          console.log('[getStats] rawResponse.data 的 keys:', Object.keys(rawResponse.data))
+        }
+
+        console.warn('[getStats] 无法从原始响应中提取统计数据')
+        return {}
+      } catch (error) {
+        console.error('[getStats] 直接请求失败，尝试使用 get 函数:', error)
+        // 如果直接请求失败，回退到使用 get 函数
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const response = await get<any>(`${API_BASE}/registrations/stats/`, params)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result = response as any
+        console.log('[getStats] get函数返回的响应:', result)
+
+        // 处理 get 函数返回的数据（响应拦截器处理后的格式）
+        if (result && typeof result === 'object') {
+          // 检查 result 本身是否就是统计数据对象
+          if ('total_count' in result || 'approved_count' in result || 'rejected_count' in result || 'pending_count' in result) {
+            console.log('[getStats] ✅ result 本身就是统计数据对象')
+            return result
+          }
+
+          // 检查 result 是否有 code 字段和 data 字段
+          if ('code' in result && result.data && typeof result.data === 'object') {
+            if ('total_count' in result.data || 'approved_count' in result.data || 'rejected_count' in result.data || 'pending_count' in result.data) {
+              console.log('[getStats] ✅ 从 result.data 提取统计数据（code格式）')
+              return result.data
+            }
+          }
+
+          // 检查 result.data 字段
+          if (result.data && typeof result.data === 'object' && ('total_count' in result.data || 'approved_count' in result.data)) {
+            console.log('[getStats] ✅ 从 result.data 提取统计数据')
+            return result.data
+          }
+        }
+
+        console.warn('[getStats] get函数返回的数据格式不符合预期')
+        return {}
+      }
+    } catch (error: unknown) {
       console.error('Get stats error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+      }
       return {}
     }
   }
@@ -745,31 +836,133 @@ export const logApi = {
         ? `${API_BASE}/logs/list/?${queryString}`
         : `${API_BASE}/logs/list/`
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const response = await get<any>(url)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = response as any
-      console.log('[getLogs] 响应数据:', JSON.stringify(result, null, 2))
+      // 直接使用 axios 获取原始响应，绕过响应拦截器，查看后端实际返回的数据
+      const axios = (await import('axios')).default
+      const { getUserToken } = await import('@/utils/storage')
+      try {
+        const token = getUserToken()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rawResponse = await axios.get(url, {
+          params: queryParams,
+          headers: token ? {
+            'Authorization': `Bearer ${token}`
+          } : {}
+        })
+        console.log('[getLogs] 原始响应数据:', rawResponse.data)
+        console.log('[getLogs] 原始响应数据类型:', typeof rawResponse.data)
+        console.log('[getLogs] 原始响应数据是否为数组:', Array.isArray(rawResponse.data))
 
-      // 宽松处理响应格式
-      // 情况1: result.data 是数组
-      if (result && Array.isArray(result.data)) {
-        console.log('[getLogs] 从 result.data 提取数据，数量:', result.data.length)
+        // 处理原始响应数据
+        let logsData: any[] = []
+
+        // 如果后端返回的是数组
+        if (Array.isArray(rawResponse.data)) {
+          logsData = rawResponse.data
+          console.log('[getLogs] ✅ 后端直接返回数组，数量:', logsData.length)
+          return logsData
+        }
+
+        // 如果后端返回的是对象
+        if (rawResponse.data && typeof rawResponse.data === 'object') {
+          // 检查是否有 data 字段
+          if (Array.isArray(rawResponse.data.data)) {
+            logsData = rawResponse.data.data
+            console.log('[getLogs] ✅ 从 rawResponse.data.data 提取数组，数量:', logsData.length)
+            return logsData
+          }
+
+          // 检查是否有 success 字段
+          if (rawResponse.data.success === true && Array.isArray(rawResponse.data.data)) {
+            logsData = rawResponse.data.data
+            console.log('[getLogs] ✅ 从 rawResponse.data.data 提取数组（success格式），数量:', logsData.length)
+            return logsData
+          }
+
+          // 检查其他可能的数组字段
+          const possibleArrayFields = ['list', 'items', 'records', 'results', 'logs']
+          for (const field of possibleArrayFields) {
+            if (Array.isArray(rawResponse.data[field])) {
+              logsData = rawResponse.data[field]
+              console.log(`[getLogs] ✅ 从 rawResponse.data.${field} 提取数组，数量:`, logsData.length)
+              return logsData
+            }
+          }
+
+          console.log('[getLogs] rawResponse.data 的 keys:', Object.keys(rawResponse.data))
+        }
+
+        console.warn('[getLogs] 无法从原始响应中提取日志数组')
+        return []
+      } catch (error) {
+        console.error('[getLogs] 直接请求失败，尝试使用 request:', error)
+        // 如果直接请求失败，回退到使用 request
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosResponse = await request.get(url, { params: queryParams })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result = axiosResponse as any
+        console.log('[getLogs] request.get 响应:', result)
+
+        // 处理响应拦截器处理后的数据
+        if (result && typeof result === 'object' && 'code' in result) {
+          if (result.data === undefined) {
+            console.warn('[getLogs] result.data 是 undefined，可能是响应拦截器处理问题')
+            return []
+          }
+        }
+
+        // 继续原有的处理逻辑
+        if (result && typeof result === 'object' && 'code' in result && result.data) {
+          if (Array.isArray(result.data)) {
+            return result.data
+          }
+        }
+
+        return []
+      }
+
+      // 如果 result 是 undefined 或 null，直接返回空数组
+      if (!result) {
+        console.warn('[getLogs] result 是 undefined 或 null，返回空数组')
+        return []
+      }
+
+      // 响应拦截器处理流程：
+      // 后端返回: { success: true, message: "...", data: [...] }
+      // 响应拦截器转换: { code: 200, message: "...", data: [...] }
+      // get函数返回: res.data，即 { code: 200, message: "...", data: [...] }
+      // 所以 result 应该是 { code: 200, data: [...] } 格式
+
+      // 情况1: result 有 code 字段，从 result.data 提取数组
+      if (result && typeof result === 'object' && 'code' in result && result.data) {
+        if (Array.isArray(result.data)) {
+          console.log('[getLogs] ✅ 从 result.data 提取数据（code格式），数量:', result.data.length)
+          return result.data
+        }
+        // 如果 result.data 是对象，可能有嵌套的 data 字段
+        if (result.data.data && Array.isArray(result.data.data)) {
+          console.log('[getLogs] ✅ 从 result.data.data 提取数据（嵌套data），数量:', result.data.data.length)
+          return result.data.data
+        }
+      }
+
+      // 情况2: result.data 是数组（直接格式）
+      if (result && typeof result === 'object' && Array.isArray(result.data)) {
+        console.log('[getLogs] ✅ 从 result.data 提取数据，数量:', result.data.length)
         return result.data
       }
 
-      // 情况2: result 本身就是数组
+      // 情况3: result 本身就是数组
       if (Array.isArray(result)) {
-        console.log('[getLogs] result 本身就是数组，数量:', result.length)
+        console.log('[getLogs] ✅ result 本身就是数组，数量:', result.length)
         return result
       }
 
-      // 情况3: 尝试查找其他可能的数组字段
+      // 情况4: 尝试查找其他可能的数组字段
       if (result && typeof result === 'object') {
-        const possibleArrayFields = ['list', 'items', 'records', 'results', 'logs']
+        const possibleArrayFields = ['list', 'items', 'records', 'results', 'logs', 'data']
         for (const field of possibleArrayFields) {
           if (Array.isArray(result[field])) {
-            console.log(`[getLogs] 从 result.${field} 提取数据，数量:`, result[field].length)
+            console.log(`[getLogs] ✅ 从 result.${field} 提取数据，数量:`, result[field].length)
             return result[field]
           }
         }
@@ -826,22 +1019,52 @@ export const logApi = {
   },
 
   /**
-   * 批量删除日志
-   * @param logIds 日志ID数组
-   * @param auditorId 审计员ID
-   * @param auditorName 审计员姓名
+   * 按月份删除日志
+   * @param month 月份（格式：YYYY-MM，如：2025-10）
    * @returns 是否删除成功
    */
-  deleteLogs: async (logIds: string[], auditorId: string, auditorName: string): Promise<boolean> => {
+  deleteLogs: async (month: string): Promise<boolean> => {
     try {
-      const response = await post<{ success: boolean }>(`${API_BASE}/logs/delete/`, {
-        logIds,
-        auditorId,
-        auditorName
-      })
-      return response.data?.success || false
-    } catch (error) {
+      console.log('[deleteLogs] 请求删除日志，月份:', month)
+
+      // 将月份格式从 YYYY-MM 转换为 YYYY/MM
+      const monthPath = month.replace('-', '/')
+      const url = `${API_BASE}/logs/delete/${monthPath}/`
+
+      console.log('[deleteLogs] 删除接口URL:', url)
+
+      // 使用 DELETE 方法
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await del<any>(url)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      console.log('[deleteLogs] 删除响应:', result)
+
+      // 处理响应格式
+      if (result && typeof result === 'object') {
+        // 检查是否有 success 字段
+        if (result.success === true || result.code === 200) {
+          console.log('[deleteLogs] ✅ 删除成功')
+          return true
+        }
+        // 检查 data 字段中是否有 success
+        if (result.data && (result.data.success === true || result.data.code === 200)) {
+          console.log('[deleteLogs] ✅ 删除成功（data格式）')
+          return true
+        }
+      }
+
+      console.warn('[deleteLogs] 删除响应格式不符合预期')
+      return false
+    } catch (error: unknown) {
       console.error('Delete logs error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+      }
       return false
     }
   }
@@ -852,6 +1075,62 @@ export const logApi = {
  */
 export const reviewApi = {
   /**
+   * 获取所有报名数据（统一接口）
+   * @param programType 节目类型（可选，如：'vocal', 'dance', 'instrumental'）
+   * @returns 报名记录列表
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getAllRegistrations: async (programType?: string): Promise<any[]> => {
+    try {
+      console.log('[getAllRegistrations] 请求所有报名数据', programType ? `类型: ${programType}` : '')
+      const params = programType ? { program_type: programType } : {}
+      // 接口路径：/api/registrations/all/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await get<any>(`${API_BASE}/registrations/all/`, params)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      console.log('[getAllRegistrations] 响应数据:', JSON.stringify(result, null, 2))
+
+      // 处理响应格式：{ success: true, data: [...] } 或 { code: 200, data: [...] }
+      if (result && Array.isArray(result.data)) {
+        console.log('[getAllRegistrations] 从 result.data 提取数据，数量:', result.data.length)
+        return result.data
+      }
+
+      // 如果响应拦截器已经处理，result.data 可能是对象
+      if (result && result.data && typeof result.data === 'object' && result.data.success === true && Array.isArray(result.data.data)) {
+        console.log('[getAllRegistrations] 从 result.data.data 提取数据，数量:', result.data.data.length)
+        return result.data.data
+      }
+
+      // 原始响应格式
+      if (result && typeof result === 'object' && result.success === true && Array.isArray(result.data)) {
+        console.log('[getAllRegistrations] 从 result.data 提取数据（success格式），数量:', result.data.length)
+        return result.data
+      }
+
+      // result 本身就是数组
+      if (Array.isArray(result)) {
+        console.log('[getAllRegistrations] result 本身就是数组，数量:', result.length)
+        return result
+      }
+
+      console.warn('[getAllRegistrations] 响应格式不符合预期，返回空数组')
+      return []
+    } catch (error: unknown) {
+      console.error('Get all registrations error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+      }
+      return []
+    }
+  },
+
+  /**
    * 获取用户统计数据
    * @returns 用户统计数据列表
    */
@@ -859,9 +1138,9 @@ export const reviewApi = {
   getUserStats: async (): Promise<any[]> => {
     try {
       console.log('[getUserStats] 请求用户统计数据')
-      // 接口路径：/api/review/api/user-stats/
+      // 接口路径：/api/review/user-stats/（根据Django URL配置，只有一个api）
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const response = await get<any>(`${API_BASE}/review/api/user-stats/`)
+      const response = await get<any>(`${API_BASE}/review/user-stats/`)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = response as any
       console.log('[getUserStats] 响应数据:', JSON.stringify(result, null, 2))
@@ -906,13 +1185,19 @@ export const reviewApi = {
         return result.data
       }
 
-      // 情况2: result 本身就是数组
+      // 情况2: result.results.data 是数组（分页格式：{ count: 3, results: { code: 200, data: [...] } }）
+      if (result && result.results && typeof result.results === 'object' && Array.isArray(result.results.data)) {
+        console.log('[getVocalRegistrations] 从 result.results.data 提取数据，数量:', result.results.data.length)
+        return result.results.data
+      }
+
+      // 情况3: result 本身就是数组
       if (Array.isArray(result)) {
         console.log('[getVocalRegistrations] result 本身就是数组，数量:', result.length)
         return result
       }
 
-      // 情况3: result.data 存在但不是数组，尝试查找其他可能的数组字段
+      // 情况4: result.data 存在但不是数组，尝试查找其他可能的数组字段
       if (result && result.data && typeof result.data === 'object') {
         // 尝试查找常见的数组字段
         const possibleArrayFields = ['list', 'items', 'records', 'results']
@@ -924,7 +1209,7 @@ export const reviewApi = {
         }
       }
 
-      // 情况4: 检查 result 中是否有直接的数组字段
+      // 情况5: 检查 result 中是否有直接的数组字段
       if (result && typeof result === 'object') {
         const possibleArrayFields = ['list', 'items', 'records', 'results', 'data']
         for (const field of possibleArrayFields) {
@@ -965,27 +1250,42 @@ export const reviewApi = {
   getDanceRegistrations: async (): Promise<any[]> => {
     try {
       console.log('[getDanceRegistrations] 请求舞蹈报名列表')
-      // 接口路径：/api/dance/registrations/
+      // 使用统一接口：/api/registrations/all/?program_type=dance
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const response = await get<any>(`${API_BASE}/dance/registrations/`)
+      const response = await get<any>(`${API_BASE}/registrations/all/`, { program_type: 'dance' })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = response as any
       console.log('[getDanceRegistrations] 响应数据:', JSON.stringify(result, null, 2))
 
-      // 宽松处理响应格式，忽略多余字段
-      // 情况1: result.data 是数组（标准格式：{ code: 200, msg: "...", data: [...] }）
+      // 处理新的响应格式：{ success: true, message: "...", data: [...] }
+      // 响应拦截器可能已经处理了响应，所以 result 可能是 { code: 200, message: "...", data: {...} }
+      // 或者直接是 { success: true, message: "...", data: [...] }
+
+      // 情况1: result.data 是数组（标准格式：{ success: true, message: "...", data: [...] } 或 { code: 200, data: {...} }）
       if (result && Array.isArray(result.data)) {
         console.log('[getDanceRegistrations] 从 result.data 提取数据，数量:', result.data.length)
         return result.data
       }
 
-      // 情况2: result 本身就是数组
+      // 情况2: result.data 是对象，包含 success 和 data 字段（响应拦截器未处理的情况）
+      if (result && result.data && typeof result.data === 'object' && result.data.success === true && Array.isArray(result.data.data)) {
+        console.log('[getDanceRegistrations] 从 result.data.data 提取数据，数量:', result.data.data.length)
+        return result.data.data
+      }
+
+      // 情况3: result 本身包含 success 和 data 字段（原始响应格式）
+      if (result && typeof result === 'object' && result.success === true && Array.isArray(result.data)) {
+        console.log('[getDanceRegistrations] 从 result.data 提取数据（success格式），数量:', result.data.length)
+        return result.data
+      }
+
+      // 情况4: result 本身就是数组
       if (Array.isArray(result)) {
         console.log('[getDanceRegistrations] result 本身就是数组，数量:', result.length)
         return result
       }
 
-      // 情况3: result.data 存在但不是数组，尝试查找其他可能的数组字段
+      // 情况5: result.data 存在但不是数组，尝试查找其他可能的数组字段
       if (result && result.data && typeof result.data === 'object') {
         const possibleArrayFields = ['list', 'items', 'records', 'results']
         for (const field of possibleArrayFields) {
@@ -996,7 +1296,7 @@ export const reviewApi = {
         }
       }
 
-      // 情况4: 检查 result 中是否有直接的数组字段
+      // 情况6: 检查 result 中是否有直接的数组字段
       if (result && typeof result === 'object') {
         const possibleArrayFields = ['list', 'items', 'records', 'results', 'data']
         for (const field of possibleArrayFields) {
@@ -1013,6 +1313,7 @@ export const reviewApi = {
         isArray: Array.isArray(result),
         hasData: !!result?.data,
         dataIsArray: Array.isArray(result?.data),
+        hasSuccess: result?.success !== undefined,
         resultKeys: result && typeof result === 'object' ? Object.keys(result) : []
       })
       return []
@@ -1030,8 +1331,128 @@ export const reviewApi = {
   },
 
   /**
+   * 获取审核记录列表
+   * @returns 审核记录列表
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getReviewRecords: async (): Promise<any[]> => {
+    try {
+      console.log('[getReviewRecords] 请求审核记录列表')
+      // 接口路径：/api/review/reviews/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await get<any>(`${API_BASE}/review/reviews/`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      console.log('[getReviewRecords] 响应数据:', JSON.stringify(result, null, 2))
+
+      // 处理响应格式：{ success: true, data: [...] }
+      if (result && Array.isArray(result.data)) {
+        console.log('[getReviewRecords] 从 result.data 提取数据，数量:', result.data.length)
+        return result.data
+      }
+
+      // 如果响应拦截器已经处理，result.data 可能是对象
+      if (result && result.data && typeof result.data === 'object' && result.data.success === true && Array.isArray(result.data.data)) {
+        console.log('[getReviewRecords] 从 result.data.data 提取数据，数量:', result.data.data.length)
+        return result.data.data
+      }
+
+      // 原始响应格式
+      if (result && typeof result === 'object' && result.success === true && Array.isArray(result.data)) {
+        console.log('[getReviewRecords] 从 result.data 提取数据（success格式），数量:', result.data.length)
+        return result.data
+      }
+
+      console.warn('[getReviewRecords] 响应格式不符合预期，返回空数组')
+      return []
+    } catch (error: unknown) {
+      console.error('Get review records error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+      }
+      return []
+    }
+  },
+
+  /**
+   * 获取器乐报名列表
+   * @returns 器乐报名记录列表
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getInstrumentalRegistrations: async (): Promise<any[]> => {
+    try {
+      console.log('[getInstrumentalRegistrations] 请求器乐报名列表')
+      // 接口路径：/api/instrumental/registrations/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await get<any>(`${API_BASE}/instrumental/registrations/`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      console.log('[getInstrumentalRegistrations] 响应数据:', JSON.stringify(result, null, 2))
+
+      // 宽松处理响应格式，忽略多余字段
+      // 情况1: result.data 是数组（标准格式：{ code: 200, msg: "...", data: [...] }）
+      if (result && Array.isArray(result.data)) {
+        console.log('[getInstrumentalRegistrations] 从 result.data 提取数据，数量:', result.data.length)
+        return result.data
+      }
+
+      // 情况2: result 本身就是数组
+      if (Array.isArray(result)) {
+        console.log('[getInstrumentalRegistrations] result 本身就是数组，数量:', result.length)
+        return result
+      }
+
+      // 情况3: result.data 存在但不是数组，尝试查找其他可能的数组字段
+      if (result && result.data && typeof result.data === 'object') {
+        const possibleArrayFields = ['list', 'items', 'records', 'results']
+        for (const field of possibleArrayFields) {
+          if (Array.isArray(result.data[field])) {
+            console.log(`[getInstrumentalRegistrations] 从 result.data.${field} 提取数据，数量:`, result.data[field].length)
+            return result.data[field]
+          }
+        }
+      }
+
+      // 情况4: 检查 result 中是否有直接的数组字段
+      if (result && typeof result === 'object') {
+        const possibleArrayFields = ['list', 'items', 'records', 'results', 'data']
+        for (const field of possibleArrayFields) {
+          if (Array.isArray(result[field])) {
+            console.log(`[getInstrumentalRegistrations] 从 result.${field} 提取数据，数量:`, result[field].length)
+            return result[field]
+          }
+        }
+      }
+
+      // 如果都不匹配，记录警告但尝试返回空数组
+      console.warn('[getInstrumentalRegistrations] 响应格式不符合预期，返回空数组')
+      console.warn('[getInstrumentalRegistrations] 响应结构:', {
+        isArray: Array.isArray(result),
+        hasData: !!result?.data,
+        dataIsArray: Array.isArray(result?.data),
+        resultKeys: result && typeof result === 'object' ? Object.keys(result) : []
+      })
+      return []
+    } catch (error: unknown) {
+      console.error('Get instrumental registrations error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+      }
+      return []
+    }
+  },
+
+  /**
    * 审核操作（通过或驳回）- 单个记录
-   * @param recordId 报名记录ID
+   * @param recordId 审核记录ID（reviewId，不是报名记录ID）
    * @param action 操作类型：'approve' | 'reject'
    * @param rejectionReason 驳回理由（驳回时必填）
    * @returns 是否操作成功
@@ -1040,34 +1461,49 @@ export const reviewApi = {
     try {
       console.log('[reviewAction] 提交单个审核操作:', { recordId, action, rejectionReason })
 
+      // 确保 record_id 是数字类型
+      const numericRecordId = typeof recordId === 'string' ? parseInt(recordId, 10) : recordId
+      if (isNaN(Number(numericRecordId))) {
+        console.error('[reviewAction] 无效的记录ID:', recordId)
+        throw new Error('无效的记录ID')
+      }
+
       const requestData: {
-        record_id: string | number
+        record_id: number
         action: string
-        rejection_reason?: string
+        reason?: string
       } = {
-        record_id: recordId,
+        record_id: Number(numericRecordId),
         action: action
       }
 
-      // 如果是驳回操作，需要提供驳回理由
+      // 如果是驳回操作，需要提供驳回理由（使用 reason 字段）
       if (action === 'reject') {
         if (!rejectionReason || !rejectionReason.trim()) {
           console.error('[reviewAction] 驳回操作必须提供驳回理由')
           return false
         }
-        requestData.rejection_reason = rejectionReason.trim()
+        requestData.reason = rejectionReason.trim()
       }
 
-      // 接口路径：/api/review/api/review-action/
+      console.log('[reviewAction] 请求数据:', JSON.stringify(requestData, null, 2))
+
+      // 接口路径：/api/review/review-action/（注意：不是 /api/review/api/review-action/）
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const response = await post<any>(`${API_BASE}/review/api/review-action/`, requestData)
+      const response = await post<any>(`${API_BASE}/review/review-action/`, requestData)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = response as any
       console.log('[reviewAction] 响应数据:', JSON.stringify(result, null, 2))
 
       // 检查响应格式
+      // 响应拦截器会将 { success: true, message: "...", data: {...} } 转换为 { code: 200, message: "...", data: {...} }
+      // 所以这里主要检查 code === 200 或 success === true
       if (result.code === 200 || result.success === true || (result.data && result.data.success === true)) {
         console.log('[reviewAction] 审核操作成功')
+        // 如果响应中有 message，可以在这里记录（但不在 API 层显示，由调用方决定是否显示）
+        if (result.message) {
+          console.log('[reviewAction] 成功消息:', result.message)
+        }
         return true
       }
       console.error('[reviewAction] 审核操作失败: 响应异常', result)
@@ -1081,9 +1517,10 @@ export const reviewApi = {
         console.error('错误状态码:', response?.status)
         console.error('错误响应数据:', response?.data)
 
-        // 处理400错误，提取错误信息
-        if (response?.status === 400 && response?.data) {
-          const errorMessage = response.data.message || response.data.detail || '审核操作失败'
+        // 处理400和404错误，提取错误信息
+        if ((response?.status === 400 || response?.status === 404) && response?.data) {
+          // 后端可能返回 { success: false, message: '...' } 格式
+          const errorMessage = response.data.message || response.data.detail || response.data.msg || '审核操作失败'
           // 抛出包含错误信息的异常，让调用方可以处理
           throw new Error(errorMessage)
         }
@@ -1122,24 +1559,24 @@ export const reviewApi = {
       const requestData: {
         action: string
         record_ids: number[]
-        rejection_reason?: string
+        reason?: string
       } = {
         action: action,
         record_ids: numericIds
       }
 
-      // 如果是驳回操作，需要提供驳回理由
+      // 如果是驳回操作，需要提供驳回理由（使用 reason 字段）
       if (action === 'reject') {
         if (!rejectionReason || !rejectionReason.trim()) {
           console.error('[batchReviewAction] 驳回操作必须提供驳回理由')
           return false
         }
-        requestData.rejection_reason = rejectionReason.trim()
+        requestData.reason = rejectionReason.trim()
       }
 
-      // 接口路径：/api/review/api/review-action/
+      // 接口路径：/api/review/review-action/（注意：不是 /api/review/api/review-action/）
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const response = await post<any>(`${API_BASE}/review/api/review-action/`, requestData)
+      const response = await post<any>(`${API_BASE}/review/review-action/`, requestData)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = response as any
       console.log('[batchReviewAction] 响应数据:', JSON.stringify(result, null, 2))
