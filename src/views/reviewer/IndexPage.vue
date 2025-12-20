@@ -2,16 +2,16 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Download, Upload } from '@element-plus/icons-vue'
-import { reviewApi, registrationApi } from '@/services/api'
+import { registrationApi } from '@/services/api'
 
-// 后端返回的用户统计数据
-interface UserStat {
+// 后端返回的大学统计数据
+interface UniversityStat {
   account: string
   username: string
-  total_count: number
-  approved_count: number
-  rejected_count: number
-  pending_count: number
+  total_registrations: number
+  approved: number
+  rejected: number
+  pending: number
 }
 
 // 按大学统计的数据
@@ -22,12 +22,10 @@ type UniversityStats = {
   passed: number       // 已通过
   rejected: number     // 已驳回
   pending: number      // 待审核
-  rejectReason?: string // 驳回理由（如果有）
-  status: '已通过' | '已驳回' | '待审核'  // 整体状态
 }
 
 const loading = ref(false)
-const userStats = ref<UserStat[]>([])
+const universityStatsData = ref<UniversityStat[]>([])
 const overallStats = ref<{
   total_count: number
   approved_count: number
@@ -42,35 +40,16 @@ const overallStats = ref<{
   draft_count: 0
 })
 
-// 根据审核逻辑：一个大学通过就是整体所有通过，驳回就是整体所有驳回
-// 所以根据状态来计算各数量
+// 将后端返回的大学统计数据转换为前端显示格式
 const universityStats = computed(() => {
-  // 从后端接口获取的数据转换为前端显示格式
-  return userStats.value.map(item => {
-    // 根据统计数据判断整体状态
-    // 如果全部通过，状态为"已通过"
-    // 如果有驳回，状态为"已驳回"
-    // 如果有待审核，状态为"待审核"
-    let status: '已通过' | '已驳回' | '待审核'
-    if (item.pending_count > 0) {
-      status = '待审核'
-    } else if (item.rejected_count > 0) {
-      status = '已驳回'
-    } else if (item.approved_count > 0 && item.rejected_count === 0 && item.pending_count === 0) {
-      status = '已通过'
-    } else {
-      status = '待审核' // 默认状态
-    }
-
+  return universityStatsData.value.map(item => {
     return {
       university: item.username || item.account, // username 对应大学名字，如果没有则显示账号
       accountId: item.account, // account 对应账号
-      total: item.total_count,
-      passed: item.approved_count,
-      rejected: item.rejected_count,
-      pending: item.pending_count,
-      status,
-      rejectReason: item.rejected_count > 0 ? '部分报名被驳回' : undefined, // 可以根据实际情况设置驳回理由
+      total: item.total_registrations,
+      passed: item.approved,
+      rejected: item.rejected,
+      pending: item.pending,
     }
   })
 })
@@ -121,21 +100,6 @@ const filteredUniversities = computed(() => {
     u.university.includes(keyword.value)
   )
 })
-
-// 查看驳回理由
-function viewRejectReason(row: UniversityStats) {
-  if (row.status === '已驳回' && row.rejectReason) {
-    ElMessageBox.alert(row.rejectReason, '驳回理由', {
-      confirmButtonText: '确定',
-      type: 'warning',
-    })
-  } else if (row.status === '已驳回') {
-    ElMessageBox.alert('该大学的报名已驳回，但未填写具体理由', '驳回状态', {
-      confirmButtonText: '确定',
-      type: 'warning',
-    })
-  }
-}
 
 // 获取状态标签类型
 function getStatusType(status: '已通过' | '已驳回' | '待审核') {
@@ -299,15 +263,15 @@ const loadOverallStats = async () => {
   }
 }
 
-// 加载用户统计数据
-const loadUserStats = async () => {
+// 加载各大学报名状态统计数据
+const loadUniversityStats = async () => {
   try {
-    console.log('[IndexPage] 开始加载用户统计数据')
-    const data = await reviewApi.getUserStats()
-    console.log('[IndexPage] 获取到的用户统计数据:', data)
-    userStats.value = data
+    console.log('[IndexPage] 开始加载各大学报名状态统计数据')
+    const data = await registrationApi.getUniversityStats()
+    console.log('[IndexPage] 获取到的各大学报名状态统计数据:', data)
+    universityStatsData.value = data
   } catch (error) {
-    console.error('[IndexPage] 加载用户统计数据失败:', error)
+    console.error('[IndexPage] 加载各大学报名状态统计数据失败:', error)
     ElMessage.error('加载统计数据失败，请稍后重试')
   }
 }
@@ -316,10 +280,10 @@ const loadUserStats = async () => {
 const loadAllData = async () => {
   loading.value = true
   try {
-    // 并行加载整体统计数据和用户统计数据
+    // 并行加载整体统计数据和各大学报名状态统计数据
     await Promise.all([
       loadOverallStats(),
-      loadUserStats()
+      loadUniversityStats()
     ])
   } catch (error) {
     console.error('[IndexPage] 加载数据失败:', error)
@@ -351,10 +315,9 @@ function exportStatistics() {
 
     // 各大学统计
     csvContent += '各大学统计\n'
-    csvContent += '大学名称,账号ID,总报名节目数,已通过,已驳回,待审核,审核状态,驳回理由\n'
+    csvContent += '大学名称,账号ID,总报名节目数,已通过,已驳回,待审核\n'
     universityStats.value.forEach(stat => {
-      const rejectReason = stat.rejectReason || ''
-      csvContent += `${stat.university},${stat.accountId},${stat.total},${stat.passed},${stat.rejected},${stat.pending},${stat.status},"${rejectReason}"\n`
+      csvContent += `${stat.university},${stat.accountId},${stat.total},${stat.passed},${stat.rejected},${stat.pending}\n`
     })
 
     // 下载文件
@@ -383,7 +346,7 @@ function exportStatistics() {
       <template #header>
         <div class="card-header">
           <span>整体报名信息统计</span>
-          <el-button type="primary" :icon="Download" @click="exportStatistics">
+          <el-button type="primary" :icon="Download" @click="exportStatistics" style="margin-left: 20px;padding-left: 10px;">
             导出统计表
           </el-button>
         </div>
@@ -459,17 +422,6 @@ function exportStatistics() {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="审核状态" width="120" fixed="right">
-          <template #default="{ row }">
-            <el-tag
-              :type="getStatusType(row.status)"
-              :style="{ cursor: row.status === '已驳回' ? 'pointer' : 'default' }"
-              @click="viewRejectReason(row)"
-            >
-              {{ row.status }}
-            </el-tag>
-          </template>
-        </el-table-column>
       </el-table>
     </el-card>
 
@@ -485,12 +437,6 @@ function exportStatistics() {
           您可以选择导出所有报名表数据,或按类别导出特定类型的报名表。
         </div>
         <div class="export-actions">
-          <el-button type="primary" :icon="Download" @click="exportAllRegistrationForms">
-            导出所有报名表
-          </el-button>
-          <el-button type="success" :icon="Download" @click="exportSelectedCategoryForms">
-            导出选中类别报名表
-          </el-button>
           <el-select
             v-model="selectedCategory"
             placeholder="请选择节目类型（全部）"
@@ -504,6 +450,13 @@ function exportStatistics() {
               :value="option.value"
             />
           </el-select>
+          <el-button type="primary" :icon="Download" @click="exportAllRegistrationForms">
+            导出所有报名表
+          </el-button>
+          <el-button type="success" :icon="Download" @click="exportSelectedCategoryForms">
+            导出选中类别报名表
+          </el-button>
+
           <el-button type="warning" :icon="Download" @click="exportStampedForms">
             导出盖章报名表
           </el-button>

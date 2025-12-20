@@ -75,7 +75,7 @@
         </el-row>
       </div>
 
-      <el-table :data="paginatedRecords" border style="width: 100%">
+      <el-table :data="paginatedRecords" border style="width: 100%" v-loading="loading">
         <el-table-column label="序号" width="70" align="center">
           <template #default="{ $index }">
             {{ (currentPage - 1) * pageSize + $index + 1 }}
@@ -487,6 +487,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { InfoFilled, UploadFilled, Download, Upload, Search } from '@element-plus/icons-vue'
+import { reviewApi } from '@/services/api'
 
 interface FileItem {
   name: string
@@ -501,8 +502,9 @@ interface RegistrationRecord {
   workName: string
   submitTime: string
   status: string
-  storageKey: string
+  storageKey?: string
   data: Record<string, unknown>
+  rawData?: any // 后端原始数据
 }
 
 const registrationRecords = ref<RegistrationRecord[]>([])
@@ -515,6 +517,7 @@ const selectedCategory = ref('')
 const exporting = ref(false)
 const uploading = ref(false)
 const sealedFileList = ref<FileItem[]>([])
+const loading = ref(false)
 
 // 获取类别名称
 const getCategoryName = (key: string) => {
@@ -535,82 +538,108 @@ const getCategoryName = (key: string) => {
   return names[key] || key
 }
 
-// 从数据中提取作品名称
-const extractWorkName = (data: Record<string, unknown>, categoryKey: string): string => {
-  // 尝试从数据中提取作品名称
-  const base = data.base as Record<string, unknown> | undefined
-
-  if (base) {
-    // 声乐作品可能使用 song1
-    if (categoryKey === 'vocal' && base.song1) {
-      return String(base.song1)
-    }
-    // 其他类别可能使用 workName 或 title
-    if (base.workName) {
-      return String(base.workName)
-    }
-    if (base.title) {
-      return String(base.title)
-    }
-    // 艺术实践工作坊使用 projectName
-    if (base.projectName) {
-      return String(base.projectName)
-    }
-    // 美育改革创新案例使用 caseName
-    if (base.caseName) {
-      return String(base.caseName)
-    }
+// 映射后端状态到前端状态
+const mapBackendStatus = (status: string | undefined | null): string => {
+  const value = typeof status === 'string' ? status.toLowerCase() : ''
+  if (['approved', 'pass', 'passed', '已通过', '已审核'].includes(value)) {
+    return '已审核'
   }
-
-  // 如果没有找到，返回默认值
-  return '未命名作品'
+  if (['rejected', 'reject', '已驳回', 'failed', '已退回'].includes(value)) {
+    return '已退回'
+  }
+  return '待审核'
 }
 
-// 加载报名记录
-const loadRegistrationRecords = () => {
-  const keyMap: Record<string, string> = {
-    'vocalFormDraft': 'vocal',
-    'instrumentFormDraft': 'instrumental',
-    'danceFormDraft': 'dance',
-    'operaFormDraft': 'opera',
-    'recitationFormDraft': 'recitation',
-    'calligraphyFormDraft': 'calligraphy',
-    'paintingFormDraft': 'painting',
-    'designFormDraft': 'design',
-    'photographyFormDraft': 'photography',
-    'microfilmFormDraft': 'microfilm',
-    'artPracticeFormDraft': 'artPractice',
-    'aestheticInnovationFormDraft': 'aestheticInnovation'
+// 映射后端报名数据到前端格式
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mapBackendRegistration = (record: any, categoryKey: string, index: number): RegistrationRecord => {
+  // 提取作品名称
+  let workName = ''
+  if (categoryKey === 'vocal') {
+    workName = record?.song1_title || record?.work_title || record?.performance_title || record?.song2_title || `声乐作品-${index + 1}`
+  } else if (categoryKey === 'dance') {
+    workName = record?.work_title || record?.performance_title || record?.work_description || `舞蹈作品-${index + 1}`
+  } else if (categoryKey === 'instrumental') {
+    workName = record?.work_title || record?.performance_title || record?.work_description || `器乐作品-${index + 1}`
+  } else {
+    workName = record?.work_title || record?.title || record?.work_name || record?.case_name || record?.project_name || `作品-${index + 1}`
   }
 
-  const records: RegistrationRecord[] = []
+  // 提取提交时间
+  const submitTime = record?.created_at || record?.submit_time || record?.created_time || new Date().toLocaleString('zh-CN')
 
-  Object.entries(keyMap).forEach(([storageKey, categoryKey]) => {
-    try {
-      const data = localStorage.getItem(storageKey)
-      if (data) {
-        const parsed = JSON.parse(data)
-        if (parsed && Object.keys(parsed).length > 0) {
-          records.push({
-            index: records.length + 1,
-            category: getCategoryName(categoryKey),
-            categoryKey: categoryKey,
-            workName: extractWorkName(parsed, categoryKey),
-            submitTime: parsed.submitTime || new Date().toLocaleString('zh-CN'),
-            status: parsed.status || '未审核',
-            storageKey: storageKey,
-            data: parsed
-          })
-        }
-      }
-    } catch (error) {
-      console.error(`加载 ${storageKey} 失败:`, error)
+  // 映射状态
+  const status = mapBackendStatus(record?.status)
+
+  return {
+    index: index + 1,
+    category: getCategoryName(categoryKey),
+    categoryKey: categoryKey,
+    workName: workName,
+    submitTime: submitTime,
+    status: status,
+    data: record,
+    rawData: record
+  }
+}
+
+// 加载报名记录（从API获取）
+const loadRegistrationRecords = async () => {
+  loading.value = true
+  try {
+    console.log('[first.vue] 开始加载报名记录')
+
+    // 并行获取所有类型的报名记录
+    const [vocalData, danceData, instrumentalData] = await Promise.all([
+      reviewApi.getAllRegistrations('vocal').catch(err => {
+        console.error('[first.vue] 获取声乐报名列表失败:', err)
+        return []
+      }),
+      reviewApi.getAllRegistrations('dance').catch(err => {
+        console.error('[first.vue] 获取舞蹈报名列表失败:', err)
+        return []
+      }),
+      reviewApi.getAllRegistrations('instrumental').catch(err => {
+        console.error('[first.vue] 获取器乐报名列表失败:', err)
+        return []
+      })
+    ])
+
+    const records: RegistrationRecord[] = []
+    let index = 0
+
+    // 处理声乐报名数据
+    if (Array.isArray(vocalData)) {
+      vocalData.forEach((item: any) => {
+        records.push(mapBackendRegistration(item, 'vocal', index++))
+      })
     }
-  })
 
-  // 不再添加假数据，直接使用从 localStorage 读取的真实数据
-  registrationRecords.value = records
-  allRecords.value = records
+    // 处理舞蹈报名数据
+    if (Array.isArray(danceData)) {
+      danceData.forEach((item: any) => {
+        records.push(mapBackendRegistration(item, 'dance', index++))
+      })
+    }
+
+    // 处理器乐报名数据
+    if (Array.isArray(instrumentalData)) {
+      instrumentalData.forEach((item: any) => {
+        records.push(mapBackendRegistration(item, 'instrumental', index++))
+      })
+    }
+
+    console.log('[first.vue] 加载完成，共', records.length, '条记录')
+    registrationRecords.value = records
+    allRecords.value = records
+  } catch (error) {
+    console.error('[first.vue] 加载报名记录失败:', error)
+    ElMessage.error('加载报名记录失败，请稍后重试')
+    registrationRecords.value = []
+    allRecords.value = []
+  } finally {
+    loading.value = false
+  }
 }
 
 // 筛选和搜索后的记录
@@ -806,11 +835,23 @@ const formatFileSize = (bytes?: number): string => {
  * @returns 格式化后的详情数据
  */
 const extractDetailFromData = (row: RegistrationRecord) => {
-  const data = row.data
-  const base = (data?.base as Record<string, unknown>) || {}
+  // 如果是从API获取的数据，直接使用 rawData
+  const rawData = row.rawData || row.data
+  const data = rawData || {}
+
+  // 兼容两种数据格式：localStorage格式（有base字段）和API格式（直接是对象）
+  const base = (data?.base as Record<string, unknown>) || data || {}
   const rosters = (data?.rosters as Record<string, unknown[]>) || {}
-  const files = (data?.files as Array<{ name?: string; size?: number; type?: string }>) || []
-  const intro = data?.intro as string || ''
+
+  // 处理文件列表：API返回的格式可能是 attachments 数组或 files 数组
+  let files: Array<{ name?: string; size?: number; type?: string; url?: string }> = []
+  if (Array.isArray(data?.files)) {
+    files = data.files
+  } else if (Array.isArray(data?.attachments)) {
+    files = data.attachments
+  }
+
+  const intro = data?.intro as string || data?.performance_description as string || data?.work_description as string || ''
 
   // 作品类的作者信息（不是 rosters）
   const authors = (data?.authors as unknown[]) || []
@@ -822,13 +863,16 @@ const extractDetailFromData = (row: RegistrationRecord) => {
   const designThoughts = data?.designThoughts as string || ''
   const exhibitionDesign = data?.exhibitionDesign as string || ''
 
-  // 计算花名册数量
-  const teachersCount = Array.isArray(rosters.teachers) ? rosters.teachers.length : 0
-  const membersCount = Array.isArray(rosters.members) ? rosters.members.length : 0
+  // 计算花名册数量（API返回的格式）
+  const participants = Array.isArray(data?.participants) ? data.participants : []
+  const teachers = Array.isArray(data?.guide_teachers) ? data.guide_teachers : []
+
+  const teachersCount = Array.isArray(rosters.teachers) ? rosters.teachers.length : teachers.length
+  const membersCount = Array.isArray(rosters.members) ? rosters.members.length : participants.length
   const accompCount = Array.isArray(rosters.accomp) ? rosters.accomp.length : 0
   const studentAccompCount = Array.isArray(rosters.studentAccomp) ? rosters.studentAccomp.length : 0
   const teacherAccompCount = Array.isArray(rosters.teacherAccomp) ? rosters.teacherAccomp.length : 0
-  const participantsCount = Array.isArray(rosters.participants) ? rosters.participants.length : 0
+  const participantsCount = Array.isArray(rosters.participants) ? rosters.participants.length : participants.length
   const authorsCount = Array.isArray(authors) ? authors.length : 0
 
   return {
@@ -837,32 +881,32 @@ const extractDetailFromData = (row: RegistrationRecord) => {
     workName: row.workName,
     submitTime: row.submitTime,
     status: row.status,
-    // 基础表单字段（演奏类）
-    performanceType: base.performanceType,
-    minutes: base.minutes,
-    seconds: base.seconds,
-    isOriginal: base.isOriginal,
-    group: base.group,
-    song1: base.song1,
-    song2: base.song2,
-    song1HasChinese: base.song1HasChinese,
-    song2HasChinese: base.song2HasChinese,
-    song1IsOriginal: base.song1IsOriginal,
-    song2IsOriginal: base.song2IsOriginal,
-    chorusCount: base.chorusCount,
-    pianoAccompanist: base.pianoAccompanist,
-    leader: base.leader,
-    tutor: base.tutor,
-    contact: base.contact,
-    phone: base.phone,
-    address: base.address,
+    // 基础表单字段（演奏类）- 兼容API格式
+    performanceType: base.performance_type || base.performanceType,
+    minutes: base.duration_minutes || base.minutes,
+    seconds: base.duration_seconds || base.seconds,
+    isOriginal: base.is_original !== undefined ? base.is_original : base.isOriginal,
+    group: base.group_type || base.group,
+    song1: base.song1_title || base.song1,
+    song2: base.song2_title || base.song2,
+    song1HasChinese: base.song1_is_chinese !== undefined ? base.song1_is_chinese : base.song1HasChinese,
+    song2HasChinese: base.song2_is_chinese !== undefined ? base.song2_is_chinese : base.song2HasChinese,
+    song1IsOriginal: base.song1_is_original !== undefined ? base.song1_is_original : base.song1IsOriginal,
+    song2IsOriginal: base.song2_is_original !== undefined ? base.song2_is_original : base.song2IsOriginal,
+    chorusCount: base.performer_count || base.chorusCount,
+    pianoAccompanist: base.piano_accompaniment || base.pianoAccompanist,
+    leader: base.leader_name || base.leader,
+    tutor: base.tutor || (teachers.length > 0 ? teachers[0]?.name : undefined),
+    contact: base.contact_name || base.contact,
+    phone: base.contact_phone || base.phone,
+    address: base.contact_address || base.address,
     // 作品类字段
-    workNameField: base.title || base.workName,
+    workNameField: base.title || base.work_title || base.workName,
     length: base.length,
     width: base.width,
-    tutorField: base.tutor,
-    createAt: base.createAt,
-    formType: base.formType,
+    tutorField: base.tutor || (teachers.length > 0 ? teachers[0]?.name : undefined),
+    createAt: base.create_at || base.createAt,
+    formType: base.form_type || base.formType,
     // 微电影特有字段
     videoMinutes: base.videoMinutes,
     videoSeconds: base.videoSeconds,
@@ -870,19 +914,19 @@ const extractDetailFromData = (row: RegistrationRecord) => {
     tutor2: base.tutor2,
     tutor3: base.tutor3,
     // 艺术实践工作坊字段
-    projectName: base.projectName,
-    contactPosition: base.contactPosition,
-    contactUnit: base.contactUnit,
-    email: base.email,
+    projectName: base.project_name || base.projectName,
+    contactPosition: base.contact_position || base.contactPosition,
+    contactUnit: base.contact_unit || base.contactUnit,
+    email: base.contact_email || base.email,
     categoryField: base.category,
     // 美育改革创新字段
-    caseName: base.caseName,
-    caseCode: base.caseCode,
-    leaderName: base.leaderName,
-    leaderTitle: base.leaderTitle,
-    submitUnit: base.submitUnit,
-    leaderUnit: base.leaderUnit,
-    leaderPhone: base.leaderPhone,
+    caseName: base.case_name || base.caseName,
+    caseCode: base.case_code || base.caseCode,
+    leaderName: base.leader_name || base.leaderName,
+    leaderTitle: base.leader_title || base.leaderTitle,
+    submitUnit: base.submit_unit || base.submitUnit,
+    leaderUnit: base.leader_unit || base.leaderUnit,
+    leaderPhone: base.leader_phone || base.leaderPhone,
     // 简介（根据不同类别可能有不同的简介字段）
     intro: intro || creationIntro || projectIntro || authorIntro || designThoughts || exhibitionDesign,
     authorIntro: authorIntro,
@@ -898,12 +942,21 @@ const extractDetailFromData = (row: RegistrationRecord) => {
     teacherAccompCount: teacherAccompCount,
     participantsCount: participantsCount,
     authorsCount: authorsCount,
-    // 文件列表
-    files: files.map(file => ({
-      name: file.name || '未知文件',
-      size: file.size,
-      type: file.type || '未知'
-    }))
+    // 文件列表 - 处理API返回的文件格式
+    files: files.map((file: any) => {
+      // API返回的文件可能有不同的字段名
+      const fileName = file.name || file.file_name || '未知文件'
+      const fileSize = file.size || file.file_size
+      const fileType = file.type || file.file_type || '未知'
+      const fileUrl = file.url || file.file_url || file.attachment_url
+
+      return {
+        name: fileName,
+        size: fileSize,
+        type: fileType,
+        url: fileUrl
+      }
+    })
   }
 }
 
@@ -917,8 +970,8 @@ const viewDetail = (row: RegistrationRecord) => {
   detailDialogVisible.value = true
 }
 
-onMounted(() => {
-  loadRegistrationRecords()
+onMounted(async () => {
+  await loadRegistrationRecords()
 })
 </script>
 

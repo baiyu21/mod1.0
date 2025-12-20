@@ -180,7 +180,7 @@ function mapVocalRegistration(record: Record<string, any>, index: number): Regis
   const conductor = teachers.find((t: { identity?: string }) => t.identity === 'conductor')
 
   return {
-    id: String(record?.id ?? record?.uuid ?? `${accountId}-${index + 1}`),
+    id: `vocal-${String(record?.id ?? record?.uuid ?? `${accountId}-${index + 1}`)}`,
     accountId,
     accountName,
     workName,
@@ -270,7 +270,7 @@ function mapDanceRegistration(record: Record<string, any>, index: number): Regis
   )
 
   return {
-    id: String(record?.id ?? record?.uuid ?? `${accountId}-${index + 1}`),
+    id: `dance-${String(record?.id ?? record?.uuid ?? `${accountId}-${index + 1}`)}`,
     accountId,
     accountName,
     workName,
@@ -354,7 +354,7 @@ function mapInstrumentalRegistration(record: Record<string, any>, index: number)
   const conductor = record?.conductor
 
   return {
-    id: String(record?.id ?? record?.uuid ?? `${accountId}-${index + 1}`),
+    id: `instrumental-${String(record?.id ?? record?.uuid ?? `${accountId}-${index + 1}`)}`,
     accountId,
     accountName,
     workName,
@@ -441,19 +441,39 @@ function matchReviewRecord(registration: Registration, reviewRecords: any[]): an
   const programType = typeMap[registration.type] || registration.type.replace('报名', '').replace('作品', '')
   const workName = registration.workName || registration.rawData?.work_title || ''
 
+  console.log('[matchReviewRecord] 开始匹配:', {
+    registrationId: registration.id,
+    workName,
+    type: registration.type,
+    mappedProgramType: programType,
+    reviewRecordsCount: reviewRecords.length
+  })
+
   // 尝试匹配：优先匹配 program_name 和 program_type
   let matched = reviewRecords.find((review: any) => {
     const reviewProgramType = review.program_type || ''
     const reviewProgramName = review.program_name || ''
 
-    // 类型匹配
+    // 类型匹配（更宽松的匹配）
     const typeMatch = reviewProgramType === programType ||
-                      reviewProgramType.toLowerCase() === programType.toLowerCase()
+                      reviewProgramType.toLowerCase() === programType.toLowerCase() ||
+                      reviewProgramType.replace(/\s+/g, '') === programType.replace(/\s+/g, '')
 
-    // 名称匹配（允许部分匹配，因为审核记录的名称可能包含额外信息）
-    const nameMatch = reviewProgramName.includes(workName) ||
-                      workName.includes(reviewProgramName) ||
-                      reviewProgramName === workName
+    // 名称匹配（精确匹配优先，然后才是包含匹配）
+    const nameMatch = reviewProgramName === workName ||
+                      reviewProgramName.trim() === workName.trim() ||
+                      reviewProgramName.includes(workName) ||
+                      workName.includes(reviewProgramName)
+
+    if (typeMatch && nameMatch) {
+      console.log('[matchReviewRecord] 找到匹配:', {
+        reviewId: review.id,
+        reviewProgramName,
+        reviewProgramType,
+        registrationWorkName: workName,
+        registrationType: programType
+      })
+    }
 
     return typeMatch && nameMatch
   })
@@ -475,7 +495,29 @@ function matchReviewRecord(registration: Registration, reviewRecords: any[]): an
       const typeMatch = reviewProgramType === programType ||
                         reviewProgramType.toLowerCase() === programType.toLowerCase()
       const timeMatch = review.submit_time && review.submit_time.includes(submitTime.split(' ')[0])
+      if (typeMatch && timeMatch) {
+        console.log('[matchReviewRecord] 通过时间匹配找到:', {
+          reviewId: review.id,
+          reviewProgramName: review.program_name,
+          reviewProgramType,
+          submitTime
+        })
+      }
       return typeMatch && timeMatch
+    })
+  }
+
+  if (!matched) {
+    console.warn('[matchReviewRecord] 未找到匹配的审核记录:', {
+      registrationId: registration.id,
+      workName,
+      type: registration.type,
+      mappedProgramType: programType,
+      availableReviews: reviewRecords.map((r: any) => ({
+        id: r.id,
+        program_name: r.program_name,
+        program_type: r.program_type
+      }))
     })
   }
 
@@ -528,11 +570,42 @@ const loadAllRegistrations = async () => {
     // 匹配审核记录并更新状态
     if (Array.isArray(reviewRecords) && reviewRecords.length > 0) {
       console.log('[ApprovalPage] 开始匹配审核记录，审核记录数量:', reviewRecords.length)
-      allRegistrations.forEach((registration) => {
+      console.log('[ApprovalPage] 审核记录列表:', reviewRecords.map((r: any) => ({
+        id: r.id,
+        program_name: r.program_name,
+        program_type: r.program_type,
+        status: r.status
+      })))
+
+      let matchedCount = 0
+      let unmatchedCount = 0
+
+      allRegistrations.forEach((registration, index) => {
         const matchedReview = matchReviewRecord(registration, reviewRecords)
         if (matchedReview) {
+          // 确保 matchedReview.id 存在且有效
+          if (matchedReview.id === undefined || matchedReview.id === null) {
+            console.error('[ApprovalPage] ❌ 匹配到的审核记录缺少ID:', {
+              registrationId: registration.id,
+              workName: registration.workName,
+              matchedReview
+            })
+            unmatchedCount++
+            return
+          }
+
           // 更新审核记录ID（用于审核操作）
-          registration.reviewId = matchedReview.id
+          const reviewId = typeof matchedReview.id === 'number' ? matchedReview.id : Number(matchedReview.id)
+          registration.reviewId = reviewId
+
+          console.log('[ApprovalPage] 设置 reviewId:', {
+            registrationId: registration.id,
+            workName: registration.workName,
+            reviewId,
+            reviewIdType: typeof reviewId,
+            matchedReviewId: matchedReview.id,
+            matchedReviewIdType: typeof matchedReview.id
+          })
 
           // 更新状态（审核记录的状态优先级更高）
           if (matchedReview.status) {
@@ -555,13 +628,30 @@ const loadAllRegistrations = async () => {
             registration.reviewTime = matchedReview.review_time
           }
 
-          console.log('[ApprovalPage] 匹配成功:', {
+          matchedCount++
+          console.log('[ApprovalPage] ✅ 匹配成功:', {
+            registrationId: registration.id,
             workName: registration.workName,
-            reviewId: matchedReview.id,
+            type: registration.type,
+            reviewId: registration.reviewId,
+            reviewIdType: typeof registration.reviewId,
+            reviewProgramName: matchedReview.program_name,
+            reviewProgramType: matchedReview.program_type,
             status: matchedReview.status
+          })
+        } else {
+          unmatchedCount++
+          console.warn('[ApprovalPage] ❌ 未匹配到审核记录:', {
+            registrationId: registration.id,
+            workName: registration.workName,
+            type: registration.type
           })
         }
       })
+
+      console.log('[ApprovalPage] 匹配完成 - 成功:', matchedCount, '失败:', unmatchedCount)
+    } else {
+      console.warn('[ApprovalPage] 审核记录列表为空或格式错误')
     }
 
     list.value = allRegistrations
@@ -600,11 +690,44 @@ function viewRegistrationDetail(row: Registration) {
 
 // 审核通过（按节目）
 async function approveRegistration(id: string) {
-  const registration = list.value.find(r => r.id === id)
+  console.log('[approveRegistration] 开始审核，前端ID:', id)
+  console.log('[approveRegistration] 当前列表记录数:', list.value.length)
+  console.log('[approveRegistration] 列表中的所有记录:', list.value.map(r => ({
+    id: r.id,
+    workName: r.workName,
+    type: r.type,
+    reviewId: r.reviewId,
+    status: r.status
+  })))
+
+  // 首先通过ID查找
+  let registration = list.value.find(r => r.id === id)
+
+  // 如果通过ID找不到，尝试通过ID的后缀部分查找（兼容旧ID格式）
+  if (!registration && id.includes('-')) {
+    const idSuffix = id.split('-').slice(1).join('-')
+    registration = list.value.find(r => {
+      const rIdSuffix = r.id.includes('-') ? r.id.split('-').slice(1).join('-') : r.id
+      return rIdSuffix === idSuffix
+    })
+  }
+
   if (!registration) {
     ElMessage.warning('该记录不存在')
+    console.error('[approveRegistration] 未找到记录，ID:', id)
+    console.error('[approveRegistration] 可用记录ID列表:', list.value.map(r => r.id))
     return
   }
+
+  console.log('[approveRegistration] 找到的记录:', {
+    id: registration.id,
+    workName: registration.workName,
+    type: registration.type,
+    status: registration.status,
+    reviewId: registration.reviewId,
+    reviewIdType: typeof registration.reviewId,
+    reviewIdValue: registration.reviewId
+  })
 
   if (registration.status !== 'pending') {
     ElMessage.warning('该记录已审核，无法重复操作')
@@ -612,31 +735,49 @@ async function approveRegistration(id: string) {
   }
 
   // 必须使用审核记录ID（reviewId），审核操作需要审核记录的ID
-  if (!registration.reviewId) {
+  if (registration.reviewId === undefined || registration.reviewId === null || registration.reviewId === '') {
     ElMessage.error('无法获取审核记录ID，请刷新页面后重试')
-    console.error('[approveRegistration] 缺少审核记录ID:', {
+    console.error('[approveRegistration] ❌ 缺少审核记录ID:', {
       frontendId: id,
       reviewId: registration.reviewId,
+      reviewIdType: typeof registration.reviewId,
       workName: registration.workName,
-      type: registration.type
+      type: registration.type,
+      registrationObject: JSON.stringify(registration, null, 2)
     })
     // 刷新列表数据，确保状态同步
     await loadAllRegistrations()
     return
   }
 
-  const numericRecordId = Number(registration.reviewId)
-  if (isNaN(numericRecordId)) {
+  // 确保 reviewId 是数字类型
+  let numericRecordId: number
+  if (typeof registration.reviewId === 'number') {
+    numericRecordId = registration.reviewId
+  } else if (typeof registration.reviewId === 'string') {
+    numericRecordId = Number(registration.reviewId)
+  } else {
+    numericRecordId = Number(registration.reviewId)
+  }
+
+  if (isNaN(numericRecordId) || numericRecordId <= 0) {
     ElMessage.error('审核记录ID格式错误')
-    console.error('[approveRegistration] 无效的审核记录ID:', { reviewId: registration.reviewId })
+    console.error('[approveRegistration] ❌ 无效的审核记录ID:', {
+      reviewId: registration.reviewId,
+      reviewIdType: typeof registration.reviewId,
+      numericRecordId,
+      isNaN: isNaN(numericRecordId)
+    })
     return
   }
 
   try {
-    console.log('[approveRegistration] 准备调用审核接口:', {
+    console.log('[approveRegistration] ✅ 准备调用审核接口:', {
       recordId: numericRecordId,
       reviewId: registration.reviewId,
-      registrationType: registration.type
+      reviewIdType: typeof registration.reviewId,
+      registrationType: registration.type,
+      workName: registration.workName
     })
     // 使用审核记录ID（reviewId），不需要传递 program_type
     const success = await reviewApi.reviewAction(numericRecordId, 'approve')
@@ -689,14 +830,28 @@ async function submitReject() {
   }
   if (!currentRejectAccount.value) return
 
+  console.log('[submitReject] 开始驳回，前端ID:', currentRejectAccount.value)
+  console.log('[submitReject] 当前列表记录数:', list.value.length)
+
   const registration = list.value.find(r => r.id === currentRejectAccount.value)
   if (!registration) {
     ElMessage.warning('该记录不存在')
+    console.error('[submitReject] 未找到记录，ID:', currentRejectAccount.value)
     rejectReasonDialogVisible.value = false
     rejectReason.value = ''
     currentRejectAccount.value = null
     return
   }
+
+  console.log('[submitReject] 找到的记录:', {
+    id: registration.id,
+    workName: registration.workName,
+    type: registration.type,
+    status: registration.status,
+    reviewId: registration.reviewId,
+    reviewIdType: typeof registration.reviewId,
+    reviewIdValue: registration.reviewId
+  })
 
   if (registration.status !== 'pending') {
     ElMessage.warning('该记录已审核，无法重复操作')
@@ -707,13 +862,15 @@ async function submitReject() {
   }
 
   // 必须使用审核记录ID（reviewId），审核操作需要审核记录的ID
-  if (!registration.reviewId) {
+  if (registration.reviewId === undefined || registration.reviewId === null || registration.reviewId === '') {
     ElMessage.error('无法获取审核记录ID，请刷新页面后重试')
-    console.error('[submitReject] 缺少审核记录ID:', {
+    console.error('[submitReject] ❌ 缺少审核记录ID:', {
       frontendId: currentRejectAccount.value,
       reviewId: registration.reviewId,
+      reviewIdType: typeof registration.reviewId,
       workName: registration.workName,
-      type: registration.type
+      type: registration.type,
+      registrationObject: JSON.stringify(registration, null, 2)
     })
     // 刷新列表数据，确保状态同步
     await loadAllRegistrations()
@@ -723,26 +880,34 @@ async function submitReject() {
     return
   }
 
-  const recordId = registration.reviewId
-  if (isNaN(Number(recordId))) {
-    ElMessage.error('审核记录ID格式错误')
-    console.error('[submitReject] 无效的审核记录ID:', { recordId, reviewId: registration.reviewId })
-    return
+  // 确保 reviewId 是有效的数字
+  let numericRecordId: number
+  if (typeof registration.reviewId === 'number') {
+    numericRecordId = registration.reviewId
+  } else if (typeof registration.reviewId === 'string') {
+    numericRecordId = Number(registration.reviewId)
+  } else {
+    numericRecordId = Number(registration.reviewId)
   }
 
-  // 确保 recordId 是数字类型
-  const numericRecordId = Number(recordId)
-  if (isNaN(numericRecordId)) {
-    ElMessage.error('记录ID格式错误')
-    console.error('[submitReject] 记录ID不是数字:', recordId)
+  if (isNaN(numericRecordId) || numericRecordId <= 0) {
+    ElMessage.error('审核记录ID格式错误')
+    console.error('[submitReject] ❌ 无效的审核记录ID:', {
+      reviewId: registration.reviewId,
+      reviewIdType: typeof registration.reviewId,
+      numericRecordId,
+      isNaN: isNaN(numericRecordId)
+    })
     return
   }
 
   try {
-    console.log('[submitReject] 准备调用审核接口:', {
+    console.log('[submitReject] ✅ 准备调用审核接口:', {
       recordId: numericRecordId,
       reviewId: registration.reviewId,
-      registrationType: registration.type
+      reviewIdType: typeof registration.reviewId,
+      registrationType: registration.type,
+      workName: registration.workName
     })
     // 使用审核记录ID（reviewId），不需要传递 program_type
     const success = await reviewApi.reviewAction(numericRecordId, 'reject', rejectReason.value.trim())

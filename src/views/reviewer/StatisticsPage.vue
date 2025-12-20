@@ -496,12 +496,6 @@ function exportMaterials() {
         </div>
       </template>
       <div class="export-actions">
-        <el-button type="primary" :icon="Download" @click="exportRegistrationInfo">
-          导出报名信息
-        </el-button>
-        <el-button type="success" :icon="Download" @click="exportMaterials">
-          导出报名材料
-        </el-button>
         <el-select
           v-model="exportMaterialType"
           placeholder="选择材料类型"
@@ -515,6 +509,13 @@ function exportMaterials() {
             :value="option.value"
           />
         </el-select>
+        <el-button type="primary" :icon="Download" @click="exportRegistrationInfo">
+          导出报名信息
+        </el-button>
+        <el-button type="success" :icon="Download" @click="exportMaterials">
+          导出报名材料
+        </el-button>
+
       </div>
     </el-card>
 

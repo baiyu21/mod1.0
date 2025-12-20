@@ -23,7 +23,7 @@ services/
 VITE_USE_MOCK=true
 
 # API 基础 URL（当使用真实接口时）
-VITE_API_BASE_URL=http://g97bda64.natappfree.cc
+VITE_API_BASE_URL=http://c369ec45.natappfree.cc
 ```
 
 ### 2. 在代码中使用

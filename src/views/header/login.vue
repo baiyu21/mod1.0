@@ -102,7 +102,7 @@ const handleTestLogin = (role: UserRole) => {
 <template>
   <div class="main">
     <div class="leftText">
-      <span class="text">大艺展<br />节目报名审核管理系统</span>
+      <span class="text">大学生艺术作品展<br />节目报名审核管理系统</span>
     </div>
     <div class="rightForm">
       <el-card class="login-card" shadow="always">

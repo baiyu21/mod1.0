@@ -154,11 +154,8 @@ function createAxiosInstance(baseURL: string): AxiosInstance {
 }
 
 // 默认实例（可根据环境变量配置 baseURL）
-// 开发环境：使用相对路径，通过 Vite 代理转发
-// 生产环境：使用完整 URL
-const baseURL = import.meta.env.DEV
-  ? '' // 开发环境使用相对路径，通过 Vite 代理
-  : (import.meta.env.VITE_API_BASE_URL || 'http://g97bda64.natappfree.cc')
+// 开发环境和生产环境都直接使用完整 URL
+const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://c369ec45.natappfree.cc'
 export const request = createAxiosInstance(baseURL)
 
 /**

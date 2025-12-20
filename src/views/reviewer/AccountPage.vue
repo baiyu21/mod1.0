@@ -18,50 +18,50 @@ type Account = {
 
 // 账号列表数据
 const accountList = ref<Account[]>([
-  { 
-    id: '1', 
-    username: 'user001', 
-    universityName: 'A大学', 
+  {
+    id: '1',
+    username: 'user001',
+    universityName: 'A大学',
     role: 'user',
     status: 'active',
     email: 'user001@example.com',
     phone: '13800138000',
     createTime: '2024-01-01'
   },
-  { 
-    id: '2', 
-    username: 'user002', 
-    universityName: 'B大学', 
+  {
+    id: '2',
+    username: 'user002',
+    universityName: 'B大学',
     role: 'user',
     status: 'active',
     email: 'user002@example.com',
     phone: '13900139000',
     createTime: '2024-01-02'
   },
-  { 
-    id: '3', 
-    username: 'reviewer001', 
-    universityName: 'C大学', 
+  {
+    id: '3',
+    username: 'reviewer001',
+    universityName: 'C大学',
     role: 'approval',
     status: 'locked',
     email: 'reviewer001@example.com',
     phone: '13700137000',
     createTime: '2024-01-03'
   },
-  { 
-    id: '4', 
-    username: 'user003', 
-    universityName: 'D大学', 
+  {
+    id: '4',
+    username: 'user003',
+    universityName: 'D大学',
     role: 'user',
     status: 'disabled',
     email: 'user003@example.com',
     phone: '13600136000',
     createTime: '2024-01-04'
   },
-  { 
-    id: '5', 
-    username: 'admin001', 
-    universityName: '系统管理员', 
+  {
+    id: '5',
+    username: 'admin001',
+    universityName: '系统管理员',
     role: 'admin',
     status: 'active',
     email: 'admin001@example.com',
@@ -97,7 +97,7 @@ const statusOptions = [
 // 筛选后的账号列表
 const filteredAccountList = computed(() => {
   return accountList.value.filter(account => {
-    const keywordMatch = !keyword.value || 
+    const keywordMatch = !keyword.value ||
       account.username.includes(keyword.value) ||
       account.universityName.includes(keyword.value) ||
       account.email?.includes(keyword.value) ||
@@ -233,7 +233,7 @@ function resetCreateAccountForm() {
 
 function submitCreateAccount() {
   if (!createAccountFormRef.value) return
-  
+
   createAccountFormRef.value.validate((valid) => {
     if (valid) {
       // 检查用户名是否已存在
@@ -241,7 +241,7 @@ function submitCreateAccount() {
         ElMessage.warning('用户名已存在')
         return
       }
-      
+
       const newAccount: Account = {
         id: String(accountList.value.length + 1),
         username: createAccountForm.username,
@@ -252,7 +252,7 @@ function submitCreateAccount() {
         phone: createAccountForm.phone || undefined,
         createTime: new Date().toISOString().split('T')[0]
       }
-      
+
       accountList.value.push(newAccount)
       ElMessage.success('账号创建成功')
       createAccountDialogVisible.value = false
@@ -291,7 +291,7 @@ function downloadTemplate() {
   // 创建Excel模版数据（CSV格式，Excel可以打开）
   const headers = ['用户名', '大学名称', '角色', '邮箱', '手机号']
   const exampleRow = ['user001', '示例大学', 'user', 'example@example.com', '13800138000']
-  
+
   // 创建CSV内容
   const csvContent = [
     headers.join(','),
@@ -303,11 +303,11 @@ function downloadTemplate() {
     '3. 用户名必须唯一',
     '4. 系统会自动为每个账号生成初始密码'
   ].join('\n')
-  
+
   // 添加BOM以支持中文显示
   const BOM = '\uFEFF'
   const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' })
-  
+
   // 创建下载链接
   const link = document.createElement('a')
   const url = URL.createObjectURL(blob)
@@ -317,7 +317,7 @@ function downloadTemplate() {
   link.click()
   document.body.removeChild(link)
   URL.revokeObjectURL(url)
-  
+
   ElMessage.success('模版下载成功')
 }
 
@@ -336,7 +336,7 @@ const changePasswordRules = reactive<FormRules>({
   ],
   confirmPassword: [
     { required: true, message: '请确认密码', trigger: 'blur' },
-    { 
+    {
       validator: (rule: any, value: any, callback: any) => {
         if (!value) {
           callback(new Error('请确认密码'))
@@ -347,8 +347,8 @@ const changePasswordRules = reactive<FormRules>({
           return
         }
         callback()
-      }, 
-      trigger: 'blur' 
+      },
+      trigger: 'blur'
     }
   ]
 })
@@ -363,7 +363,7 @@ function openChangePasswordDialog(row: Account) {
 
 function submitChangePassword() {
   if (!changePasswordFormRef.value) return
-  
+
   changePasswordFormRef.value.validate((valid) => {
     if (valid && currentChangeAccount.value) {
       ElMessage.success(`已修改账号 ${currentChangeAccount.value.username} 的密码`)
@@ -386,7 +386,7 @@ function disableAccount(row: Account) {
       type: 'warning'
     }
   ).then(() => {
-    accountList.value = accountList.value.map(acc => 
+    accountList.value = accountList.value.map(acc =>
       acc.id === row.id ? { ...acc, status: 'disabled' as const } : acc
     )
     ElMessage.success('账号已停用')
@@ -399,7 +399,7 @@ function batchDisableAccount() {
     ElMessage.warning('请先选择要停用的账号')
     return
   }
-  
+
   const usernames = multipleSelection.value.map(acc => acc.username).join('、')
   ElMessageBox.confirm(
     `确定要停用以下 ${multipleSelection.value.length} 个账号吗？\n${usernames}`,
@@ -411,7 +411,7 @@ function batchDisableAccount() {
     }
   ).then(() => {
     const ids = new Set(multipleSelection.value.map(acc => acc.id))
-    accountList.value = accountList.value.map(acc => 
+    accountList.value = accountList.value.map(acc =>
       ids.has(acc.id) ? { ...acc, status: 'disabled' as const } : acc
     )
     ElMessage.success(`已批量停用 ${ids.size} 个账号`)
@@ -430,7 +430,7 @@ function unlockAccount(row: Account) {
       type: 'warning'
     }
   ).then(() => {
-    accountList.value = accountList.value.map(acc => 
+    accountList.value = accountList.value.map(acc =>
       acc.id === row.id ? { ...acc, status: 'active' as const } : acc
     )
     ElMessage.success('账号已解锁')
@@ -443,7 +443,7 @@ function batchUnlockAccount() {
     ElMessage.warning('请先选择要解锁的账号')
     return
   }
-  
+
   const usernames = multipleSelection.value.map(acc => acc.username).join('、')
   ElMessageBox.confirm(
     `确定要解锁以下 ${multipleSelection.value.length} 个账号吗？\n${usernames}`,
@@ -455,7 +455,7 @@ function batchUnlockAccount() {
     }
   ).then(() => {
     const ids = new Set(multipleSelection.value.map(acc => acc.id))
-    accountList.value = accountList.value.map(acc => 
+    accountList.value = accountList.value.map(acc =>
       ids.has(acc.id) && acc.status === 'locked' ? { ...acc, status: 'active' as const } : acc
     )
     ElMessage.success(`已批量解锁 ${ids.size} 个账号`)
@@ -477,16 +477,20 @@ function batchUnlockAccount() {
             <el-button type="success" :icon="Upload" @click="openImportAccountDialog">
               批量导入
             </el-button>
+            <el-button type="success" @click="batchUnlockAccount">
+              批量启用
+            </el-button>
             <el-button type="warning" @click="batchDisableAccount">
               批量停用
             </el-button>
             <el-button type="info" @click="batchUnlockAccount">
               批量解锁
             </el-button>
+
           </div>
         </div>
       </template>
-      
+
       <!-- 搜索和筛选 -->
       <div class="filters">
         <el-input
@@ -512,11 +516,11 @@ function batchUnlockAccount() {
           />
         </el-select>
       </div>
-      
+
       <!-- 账号列表表格 -->
-      <el-table 
-        :data="filteredAccountList" 
-        @selection-change="handleSelectionChange" 
+      <el-table
+        :data="filteredAccountList"
+        @selection-change="handleSelectionChange"
         stripe
         row-key="id"
         style="margin-top: 16px"
@@ -537,38 +541,38 @@ function batchUnlockAccount() {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="email" label="邮箱" min-width="200" />
-        <el-table-column prop="phone" label="手机号" width="130" />
+        <el-table-column prop="email" label="修改人账号" min-width="200" />
+        <el-table-column prop="phone" label="修改人手机号" width="130" />
         <el-table-column prop="createTime" label="创建时间" width="120" />
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
-            <el-button 
-              size="small" 
-              type="primary" 
+            <el-button
+              size="small"
+              type="primary"
               @click="openChangePasswordDialog(row)"
             >
               修改密码
             </el-button>
-            <el-button 
+            <el-button
               v-if="row.status === 'active'"
-              size="small" 
-              type="warning" 
+              size="small"
+              type="warning"
               @click="disableAccount(row)"
             >
               停用
             </el-button>
-            <el-button 
+            <el-button
               v-if="row.status === 'locked'"
-              size="small" 
-              type="success" 
+              size="small"
+              type="success"
               @click="unlockAccount(row)"
             >
               解锁
             </el-button>
-            <el-button 
+            <el-button
               v-if="row.status === 'disabled'"
-              size="small" 
-              type="success" 
+              size="small"
+              type="success"
               @click="accountList = accountList.map(acc => acc.id === row.id ? { ...acc, status: 'active' } : acc)"
             >
               启用
@@ -796,7 +800,7 @@ function batchUnlockAccount() {
   padding: 12px;
   border-radius: 4px;
   margin-bottom: 10px;
-  
+
   p {
     margin: 4px 0;
     font-size: 14px;
@@ -811,16 +815,16 @@ function batchUnlockAccount() {
   border-radius: 4px;
   font-size: 13px;
   color: #606266;
-  
+
   p {
     margin: 0 0 8px 0;
     font-weight: 500;
   }
-  
+
   ul {
     margin: 0;
     padding-left: 20px;
-    
+
     li {
       margin: 4px 0;
       line-height: 1.6;
@@ -834,16 +838,16 @@ function batchUnlockAccount() {
   border-radius: 4px;
   font-size: 14px;
   color: #606266;
-  
+
   p {
     margin: 0 0 8px 0;
     font-weight: 500;
   }
-  
+
   ul {
     margin: 8px 0;
     padding-left: 20px;
-    
+
     li {
       margin: 4px 0;
       line-height: 1.6;

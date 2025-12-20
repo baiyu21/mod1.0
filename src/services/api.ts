@@ -47,7 +47,7 @@ export interface ReviewParams {
  * API 基础路径配置
  */
 const API_BASE = '/api'
-const FILE_BASE_URL = (import.meta.env.VITE_FILE_BASE_URL as string | undefined) || 'https://filesystem7777.oss-cn-chengdu.aliyuncs.com'
+const FILE_BASE_URL = (import.meta.env.VITE_FILE_BASE_URL as string | undefined) || 'http://c369ec45.natappfree.cc'
 
 /**
  * 根据账号前缀映射角色（如果后端不返回 role 字段时使用）
@@ -802,6 +802,63 @@ export const registrationApi = {
       }
       return {}
     }
+  },
+
+  /**
+   * 获取各大学报名状态统计
+   * @returns 各大学统计数据列表
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getUniversityStats: async (): Promise<any[]> => {
+    try {
+      console.log('[getUniversityStats] 请求各大学报名状态统计数据')
+      // 接口路径：/api/registrations/admin/university-stats/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await get<any>(`${API_BASE}/registrations/admin/university-stats/`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+      console.log('[getUniversityStats] 响应数据:', JSON.stringify(result, null, 2))
+
+      // 处理响应格式：{ success: true, message: "...", data: [...] }
+      if (result && typeof result === 'object') {
+        // 如果 result.data 是数组
+        if (Array.isArray(result.data)) {
+          console.log('[getUniversityStats] ✅ 从 result.data 提取数据，数量:', result.data.length)
+          return result.data
+        }
+
+        // 如果 result.data.data 是数组（双重嵌套）
+        if (result.data && typeof result.data === 'object' && Array.isArray(result.data.data)) {
+          console.log('[getUniversityStats] ✅ 从 result.data.data 提取数据，数量:', result.data.data.length)
+          return result.data.data
+        }
+
+        // 如果 result.success === true && result.data 是数组
+        if (result.success === true && Array.isArray(result.data)) {
+          console.log('[getUniversityStats] ✅ 从 result.data 提取数据（success格式），数量:', result.data.length)
+          return result.data
+        }
+      }
+
+      // 如果 result 本身就是数组
+      if (Array.isArray(result)) {
+        console.log('[getUniversityStats] ✅ result 本身就是数组，数量:', result.length)
+        return result
+      }
+
+      console.warn('[getUniversityStats] ❌ 响应格式不符合预期，返回空数组')
+      return []
+    } catch (error: unknown) {
+      console.error('Get university stats error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+      }
+      return []
+    }
   }
 }
 
@@ -1343,27 +1400,40 @@ export const reviewApi = {
       const response = await get<any>(`${API_BASE}/review/reviews/`)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = response as any
-      console.log('[getReviewRecords] 响应数据:', JSON.stringify(result, null, 2))
+      console.log('[getReviewRecords] 原始响应数据:', JSON.stringify(result, null, 2))
+      console.log('[getReviewRecords] 响应数据类型:', typeof result)
+      console.log('[getReviewRecords] 响应数据keys:', result ? Object.keys(result) : 'null')
 
       // 处理响应格式：{ success: true, data: [...] }
       if (result && Array.isArray(result.data)) {
-        console.log('[getReviewRecords] 从 result.data 提取数据，数量:', result.data.length)
+        console.log('[getReviewRecords] ✅ 从 result.data 提取数据，数量:', result.data.length)
+        console.log('[getReviewRecords] 审核记录示例:', result.data[0])
         return result.data
       }
 
       // 如果响应拦截器已经处理，result.data 可能是对象
       if (result && result.data && typeof result.data === 'object' && result.data.success === true && Array.isArray(result.data.data)) {
-        console.log('[getReviewRecords] 从 result.data.data 提取数据，数量:', result.data.data.length)
+        console.log('[getReviewRecords] ✅ 从 result.data.data 提取数据，数量:', result.data.data.length)
+        console.log('[getReviewRecords] 审核记录示例:', result.data.data[0])
         return result.data.data
       }
 
-      // 原始响应格式
+      // 原始响应格式：{ success: true, data: [...] }
       if (result && typeof result === 'object' && result.success === true && Array.isArray(result.data)) {
-        console.log('[getReviewRecords] 从 result.data 提取数据（success格式），数量:', result.data.length)
+        console.log('[getReviewRecords] ✅ 从 result.data 提取数据（success格式），数量:', result.data.length)
+        console.log('[getReviewRecords] 审核记录示例:', result.data[0])
         return result.data
       }
 
-      console.warn('[getReviewRecords] 响应格式不符合预期，返回空数组')
+      // 如果 result 本身就是数组
+      if (Array.isArray(result)) {
+        console.log('[getReviewRecords] ✅ result 本身就是数组，数量:', result.length)
+        console.log('[getReviewRecords] 审核记录示例:', result[0])
+        return result
+      }
+
+      console.warn('[getReviewRecords] ❌ 响应格式不符合预期，返回空数组')
+      console.warn('[getReviewRecords] 响应内容:', result)
       return []
     } catch (error: unknown) {
       console.error('Get review records error:', error)

@@ -21,7 +21,7 @@ export default defineConfig({
     proxy: {
       // 代理所有以 /api 开头的请求
       '/api': {
-        target: 'http://c369ec45.natappfree.cc',
+        target: 'http://g97bda64.natappfree.cc',
         changeOrigin: true, // 改变请求头中的 origin
         secure: false, // 如果是 https 接口，需要配置这个参数
         // 可选：重写路径，如果后端接口路径不是 /api 开头，可以在这里重写
