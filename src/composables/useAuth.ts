@@ -52,7 +52,7 @@ export function useAuth() {
     loading.value = true
     try {
       const authResult = await authenticate(form.username, form.password)
-      
+
       if (authResult && authResult.token) {
         // 登录成功：有 token 且不为空
         userStore.login({
@@ -99,7 +99,7 @@ export function useAuth() {
     try {
       // 在清空 store 之前获取 refreshToken
       const refreshToken = userStore.refreshToken
-      
+
       // 调用登出接口
       const { authApi } = await import('@/services/api')
       await authApi.logout(refreshToken || undefined)

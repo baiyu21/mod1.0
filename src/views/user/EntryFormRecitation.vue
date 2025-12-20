@@ -17,14 +17,14 @@
       <el-form ref="formRef" :model="baseForm" :rules="formRules" label-width="120px" :disabled="readonly" class="ef-base-form">
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="表演形式">
+            <el-form-item label="表演形式" prop="performanceType">
               <el-select v-model="baseForm.performanceType" placeholder="请选择" style="width: 100%">
                 <el-option label="朗诵" value="group-dance" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="作品时长">
+            <el-form-item label="作品时长" prop="minutes">
               <div class="ef-duration">
                 <el-input v-model.number="baseForm.minutes" type="number" min="0" style="width:80px" />
                 <span class="ef-unit">分</span>
@@ -36,12 +36,12 @@
         </el-row>
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="作品名称">
+            <el-form-item label="作品名称" prop="workName">
               <el-input v-model="baseForm.workName" placeholder="请输入作品名称" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="表演人数">
+            <el-form-item label="表演人数" prop="count">
               <el-input v-model.number="baseForm.count" type="number" min="1" placeholder="请输入表演人数" />
               <!-- 人数限制提示 -->
               <div v-if="memberLimitInfo.maxCount !== undefined && baseForm.count" class="member-limit-tip-input" :class="{ 'limit-exceeded': isExceededLimit }">
@@ -61,7 +61,7 @@
         </el-row>
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="是否为原创">
+            <el-form-item label="是否为原创" prop="isOriginal">
               <el-radio-group v-model="baseForm.isOriginal">
                 <el-radio :label="true">是</el-radio>
                 <el-radio :label="false">否</el-radio>
@@ -90,7 +90,7 @@
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="组别">
+              <el-form-item label="组别" prop="group">
                 <el-select v-model="baseForm.group" placeholder="请选择" style="width: 100%">
                   <el-option label="甲组(非专业组)" value="group1" />
                   <el-option label="乙组（专业组）" value="group2" />
@@ -210,6 +210,26 @@ const emit = defineEmits<{ (e: 'submit', payload: SubmitPayload): void }>()
 // 表单引用和验证规则
 const formRef = ref<FormInstance>()
 const formRules: FormRules = {
+  performanceType: [
+    { required: true, message: '请选择表演形式', trigger: 'change' }
+  ],
+  minutes: [
+    { required: true, message: '请输入作品时长（分钟）', trigger: 'blur' },
+    { type: 'number', min: 0, message: '分钟数不能小于0', trigger: 'blur' }
+  ],
+  workName: [
+    { required: true, message: '请输入作品名称', trigger: 'blur' }
+  ],
+  count: [
+    { required: true, message: '请输入表演人数', trigger: 'blur' },
+    { type: 'number', min: 1, message: '人数不能小于1', trigger: 'blur' }
+  ],
+  isOriginal: [
+    { required: true, message: '请选择是否为原创', trigger: 'change' }
+  ],
+  group: [
+    { required: true, message: '请选择组别', trigger: 'change' }
+  ],
   contact: commonRules.contactName,
   phone: commonRules.phone,
   address: commonRules.address
@@ -297,12 +317,12 @@ const onSubmit = async () => {
   const rosters = { teachers: teachers.value, members: members.value, studentAccomp: studentAccomp.value, teacherAccomp: teacherAccomp.value }
   const totalCount = calculateTotalMemberCount(rosters)
   const routeName = route.name as string
-  
+
   const passed = await checkMemberLimit(routeName, totalCount)
   if (!passed) {
     return
   }
-  
+
   const payload: SubmitPayload = {
     base: baseForm,
     intro: intro.value,

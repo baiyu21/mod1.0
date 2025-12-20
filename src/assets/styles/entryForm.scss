@@ -54,8 +54,52 @@
   margin-bottom: 16px;
 }
 
-// 上传宽度
-.ef-upload-block { width: 420px; }
+// 上传宽度 - 占据整个区域
+.ef-upload-block {
+  width: 100%;
+  display: block;
+
+  :deep(.el-upload) {
+    width: 100%;
+    display: block;
+  }
+
+  :deep(.el-upload-dragger) {
+    width: 100%;
+    min-height: 250px;
+    padding: 60px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+
+  :deep(.el-icon--upload) {
+    font-size: 67px;
+    color: #c0c4cc;
+    margin-bottom: 16px;
+  }
+
+  :deep(.el-upload__text) {
+    color: #606266;
+    font-size: 14px;
+    margin-top: 8px;
+    text-align: center;
+
+    em {
+      color: #409eff;
+      font-style: normal;
+    }
+  }
+
+  :deep(.el-upload__tip) {
+    color: #909399;
+    font-size: 12px;
+    margin-top: 8px;
+    text-align: center;
+  }
+}
 
 // 标题
 .ef-section-title {
@@ -94,5 +138,12 @@
 
 // 响应式
 @media (max-width: 1024px) {
-  .ef-upload-block { width: 100%; }
+  .ef-upload-block {
+    width: 100%;
+
+    :deep(.el-upload-dragger) {
+      min-height: 200px;
+      padding: 40px 15px;
+    }
+  }
 }

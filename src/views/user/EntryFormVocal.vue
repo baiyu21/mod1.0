@@ -77,6 +77,24 @@ const emit = defineEmits<{ (e: 'submit', payload: SubmitPayload): void }>()
 // 表单引用和验证规则
 const formRef = ref<FormInstance>()
 const formRules: FormRules = {
+  performanceType: [
+    { required: true, message: '请选择表演形式', trigger: 'change' }
+  ],
+  minutes: [
+    { required: true, message: '请输入作品时长（分钟）', trigger: 'blur' },
+    { type: 'number', min: 0, message: '分钟数不能小于0', trigger: 'blur' }
+  ],
+  seconds: [
+    { required: true, message: '请输入作品时长（秒）', trigger: 'blur' },
+    { type: 'number', min: 0, max: 59, message: '秒数应在0-59之间', trigger: 'blur' }
+  ],
+  chorusCount: [
+    { required: true, message: '请输入人数', trigger: 'blur' },
+    { type: 'number', min: 1, message: '人数不能小于1', trigger: 'blur' }
+  ],
+  song1: [
+    { required: true, message: '请输入曲目1名称', trigger: 'blur' }
+  ],
   contact: commonRules.contactName,
   phone: commonRules.phone,
   address: commonRules.address
@@ -412,7 +430,7 @@ const onSubmit = async () => {
         <!-- 表演形式和时长 -->
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="表演形式">
+            <el-form-item label="表演形式" prop="performanceType">
               <el-select v-model="baseForm.performanceType" placeholder="请选择" style="width: 100%">
                 <el-option label="合唱" value="chorus" />
                 <el-option label="小合唱/表演唱" value="ensemble" />
@@ -421,11 +439,11 @@ const onSubmit = async () => {
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="作品时长">
+            <el-form-item label="作品时长" prop="minutes">
               <div class="duration">
                 <el-input v-model.number="baseForm.minutes" type="number" min="0" style="width:80px" />
                 <span class="unit">分</span>
-                <el-input v-model.number="baseForm.seconds" type="number" min="0" max="59" style="width:80px" />
+                <el-input v-model.number="baseForm.seconds" type="number" min="0" max="59" style="width:80px" prop="seconds" />
                 <span class="unit">秒</span>
               </div>
             </el-form-item>
@@ -435,7 +453,7 @@ const onSubmit = async () => {
         <!-- 人数（合唱或小合唱时显示） -->
         <el-row :gutter="24" v-if="baseForm.performanceType === 'chorus' || baseForm.performanceType === 'ensemble'">
           <el-col :span="12">
-            <el-form-item :label="baseForm.performanceType === 'chorus' ? '合唱人数' : '小合唱人数'">
+            <el-form-item :label="baseForm.performanceType === 'chorus' ? '合唱人数' : '小合唱人数'" prop="chorusCount">
               <el-input
                 v-model.number="baseForm.chorusCount"
                 type="number"
@@ -466,7 +484,7 @@ const onSubmit = async () => {
           <!-- 曲目1 -->
           <el-row :gutter="24">
             <el-col :span="8">
-              <el-form-item label="曲目1" required>
+              <el-form-item label="曲目1" prop="song1" required>
                 <el-input v-model="baseForm.song1" placeholder="请输入曲目名称" />
               </el-form-item>
             </el-col>

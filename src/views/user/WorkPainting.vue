@@ -76,10 +76,30 @@ const authors = ref<RosterItem[]>([])
 // 表单引用和验证规则
 const formRef = ref<FormInstance>()
 const formRules: FormRules = {
+  title: [
+    { required: true, message: '请输入作品名称', trigger: 'blur' }
+  ],
+  length: [
+    { required: true, message: '请输入作品长度', trigger: 'blur' },
+    { type: 'number', min: 0, message: '长度必须大于0', trigger: 'blur' }
+  ],
+  width: [
+    { required: true, message: '请输入作品宽度', trigger: 'blur' },
+    { type: 'number', min: 0, message: '宽度必须大于0', trigger: 'blur' }
+  ],
+  createAt: [
+    { required: true, message: '请选择创作时间', trigger: 'change' }
+  ],
+  formType: [
+    { required: true, message: '请选择作品形式', trigger: 'change' }
+  ],
+  group: [
+    { required: true, message: '请选择组别', trigger: 'change' }
+  ],
+  tutor: commonRules.contactName,
   contact: commonRules.contactName,
   phone: commonRules.phone,
-  address: commonRules.address,
-  tutor: commonRules.contactName
+  address: commonRules.address
 }
 
 const props = defineProps<{ readonly?: boolean }>()
@@ -247,7 +267,7 @@ const onSubmit = async () => {
       <el-form ref="formRef" :model="baseForm" :rules="formRules" label-width="120px" class="ef-base-form">
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="作品名称">
+            <el-form-item label="作品名称" prop="title">
               <el-input v-model="baseForm.title" placeholder="请输入作品名称" />
             </el-form-item>
           </el-col>
@@ -259,19 +279,19 @@ const onSubmit = async () => {
         </el-row>
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="作品长度">
+            <el-form-item label="作品长度" prop="length">
               <el-input v-model="baseForm.length" type="number" placeholder="单位(cm)" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="作品宽度">
+            <el-form-item label="作品宽度" prop="width">
               <el-input v-model="baseForm.width" type="number" placeholder="单位(cm)" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="创作时间">
+            <el-form-item label="创作时间" prop="createAt">
               <el-date-picker
                 v-model="baseForm.createAt"
                 type="date"
@@ -282,7 +302,7 @@ const onSubmit = async () => {
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="作品形式">
+            <el-form-item label="作品形式" prop="formType">
               <el-select v-model="baseForm.formType" placeholder="请选择" style="width: 100%">
                 <el-option label="国画" value="chinese-painting" />
                 <el-option label="水彩/水粉画" value="watercolor" />
@@ -294,7 +314,7 @@ const onSubmit = async () => {
         </el-row>
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="组别">
+            <el-form-item label="组别" prop="group">
               <el-select v-model="baseForm.group" placeholder="请选择" style="width: 100%">
                 <el-option label="甲组(非专业组)" value="group1" />
                 <el-option label="乙组（专业组）" value="group2" />

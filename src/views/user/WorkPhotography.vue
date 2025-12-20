@@ -78,10 +78,13 @@ defineProps<{ readonly?: boolean }>()
 // 表单引用和验证规则
 const formRef = ref<FormInstance>()
 const formRules: FormRules = {
+  title: [
+    { required: true, message: '请输入作品名称', trigger: 'blur' }
+  ],
+  tutor: commonRules.contactName,
   contact: commonRules.contactName,
   phone: commonRules.phone,
-  address: commonRules.address,
-  tutor: commonRules.contactName
+  address: commonRules.address
 }
 
 // 作品形式映射：前端值 → 后端值
@@ -225,26 +228,26 @@ const onSubmit = async () => {
     // 作品基本信息
     title: String(baseForm.title || '').trim(),
     instructor: String(baseForm.tutor || '').trim(),
-    
+
     // 联系信息
     contact_name: String(baseForm.contact || '').trim(),
     contact_phone: String(baseForm.phone || '').trim(),
     contact_address: String(baseForm.address || '').trim(),
-    
+
     // 作品详情
     creation_time: String(baseForm.createAt || '').trim(), // YYYY-MM-DD 格式
     work_form: mapWorkForm(baseForm.formType), // "single" 或 "group"
     width: Number(baseForm.width) || 0, // 数字格式
     length: Number(baseForm.length) || 0, // 数字格式
     group: mapGroup(baseForm.group), // "group_a" 或 "group_b"
-    
+
     // 文件
     work_url: workUrl, // 作品URL
-    
+
     // 简介
     author_bio: String(authorIntro.value || '').trim(),
     creation_intro: String(creationIntro.value || '').trim(),
-    
+
     // 作者数组
     authors: authorsData
   }
@@ -305,7 +308,7 @@ const onSubmit = async () => {
       <el-form ref="formRef" :model="baseForm" :rules="formRules" label-width="120px" class="ef-base-form">
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="作品名称">
+            <el-form-item label="作品名称" prop="title">
               <el-input v-model="baseForm.title" placeholder="请输入作品名称" />
             </el-form-item>
           </el-col>

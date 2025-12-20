@@ -120,14 +120,8 @@
       <div class="ef-sec-watermark">2</div>
       <div class="export-section">
         <p class="export-desc">您可以选择导出所有报名表数据，或按类别导出特定类型的报名表。</p>
-        <el-row :gutter="24">
-          <el-col :span="12">
-            <el-button type="primary" size="large" @click="exportAll" :loading="exporting">
-              <el-icon><Download /></el-icon>
-              导出所有报名表
-            </el-button>
-          </el-col>
-          <el-col :span="12">
+        <el-row :gutter="16" align="middle">
+          <el-col :span="6">
             <el-select v-model="selectedCategory" placeholder="选择类别" style="width: 100%">
               <el-option label="声乐报名" value="vocal" />
               <el-option label="器乐报名" value="instrumental" />
@@ -143,10 +137,14 @@
               <el-option label="美育改革创新案例" value="aestheticInnovation" />
             </el-select>
           </el-col>
-        </el-row>
-        <el-row :gutter="24" style="margin-top: 16px">
-          <el-col :span="24">
-            <el-button type="success" size="large" @click="exportByCategory" :disabled="!selectedCategory" :loading="exporting">
+          <el-col :span="9">
+            <el-button type="primary" size="large" @click="exportAll" :loading="exporting" style="width: 100%">
+              <el-icon><Download /></el-icon>
+              导出所有报名表
+            </el-button>
+          </el-col>
+          <el-col :span="9">
+            <el-button type="success" size="large" @click="exportByCategory" :disabled="!selectedCategory" :loading="exporting" style="width: 100%">
               <el-icon><Download /></el-icon>
               导出选中类别报名表
             </el-button>
@@ -1003,6 +1001,52 @@ onMounted(async () => {
   margin-top: 16px;
   display: flex;
   justify-content: center;
+}
+
+.ef-upload-block {
+  width: 100%;
+  display: block;
+
+  :deep(.el-upload) {
+    width: 100%;
+    display: block;
+  }
+
+  :deep(.el-upload-dragger) {
+    width: 100%;
+    min-height: 250px;
+    padding: 60px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+
+  :deep(.el-icon--upload) {
+    font-size: 67px;
+    color: #c0c4cc;
+    margin-bottom: 16px;
+  }
+
+  :deep(.el-upload__text) {
+    color: #606266;
+    font-size: 14px;
+    margin-top: 8px;
+    text-align: center;
+
+    em {
+      color: #409eff;
+      font-style: normal;
+    }
+  }
+
+  :deep(.el-upload__tip) {
+    color: #909399;
+    font-size: 12px;
+    margin-top: 8px;
+    text-align: center;
+  }
 }
 </style>
 

@@ -50,21 +50,21 @@ const API_BASE = '/api'
 const FILE_BASE_URL = (import.meta.env.VITE_FILE_BASE_URL as string | undefined) || 'http://c369ec45.natappfree.cc'
 
 /**
- * 根据账号前缀映射角色（如果后端不返回 role 字段时使用）
- * @param account 账号
- * @returns 角色类型
+ * 将后端返回的角色映射为前端角色类型
+ * @param backendRole 后端返回的角色
+ * @returns 前端角色类型
  */
-function mapAccountToRole(account: string): UserRole {
-  if (account.startsWith('tsy1') || account.startsWith('user')) {
-    return 'user'
-  } else if (account.startsWith('tsy3') || account.startsWith('reviewer')) {
+function mapBackendRoleToFrontendRole(backendRole: string): UserRole {
+  // 后端角色映射：reviewer -> approval, logger -> logaudit
+  if (backendRole === 'reviewer') {
     return 'approval'
-  } else if (account.startsWith('tsy2') || account.startsWith('admin')) {
-    return 'admin'
-  } else if (account.startsWith('tsy4') || account.startsWith('logger')) {
+  } else if (backendRole === 'logger') {
     return 'logaudit'
+  } else if (backendRole === 'admin' || backendRole === 'user') {
+    return backendRole as UserRole
   }
-  return 'user' // 默认返回用户角色
+  // 如果角色不匹配，默认返回用户角色
+  return 'user'
 }
 
 /**
@@ -92,7 +92,8 @@ export const authApi = {
       //   "is_locked": false,
       //   "remaining_attempts": 5,
       //   "access_token": "...",
-      //   "refresh": "..."
+      //   "refresh": "...",
+      //   "role": "admin"
       // }
 
       if (!response) {
@@ -111,19 +112,24 @@ export const authApi = {
           return null
         }
 
-        // 从 token 中解析用户ID（如果需要）
-        // 或者使用 account 作为 userId
-        const userId = loginData.user_id || loginData.userId || account
+        // 检查是否有 role（后端必须返回角色）
+        if (!loginData.role) {
+          console.error('登录失败：后端未返回角色信息')
+          return null
+        }
 
         // 获取 refresh token
         const refreshToken = loginData.refresh || loginData.refreshToken || loginData.refresh_token
 
+        // 将后端角色映射为前端角色类型
+        const userRole = mapBackendRoleToFrontendRole(loginData.role)
+
         // 构建登录结果
         const result: LoginResponse = {
-          userId: userId,
-          role: loginData.role || mapAccountToRole(account), // 如果后端不返回 role，根据账号映射
+          userId: account, // 使用账号作为 userId
+          role: userRole,
           token: accessToken,
-          refreshToken: refreshToken, // 保存 refresh token
+          refreshToken: refreshToken,
           name: loginData.name || loginData.username || '',
           phone: loginData.phone || loginData.telephone || ''
         }
@@ -1139,40 +1145,33 @@ export const reviewApi = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getAllRegistrations: async (programType?: string): Promise<any[]> => {
     try {
-      console.log('[getAllRegistrations] 请求所有报名数据', programType ? `类型: ${programType}` : '')
       const params = programType ? { program_type: programType } : {}
       // 接口路径：/api/registrations/all/
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const response = await get<any>(`${API_BASE}/registrations/all/`, params)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = response as any
-      console.log('[getAllRegistrations] 响应数据:', JSON.stringify(result, null, 2))
 
       // 处理响应格式：{ success: true, data: [...] } 或 { code: 200, data: [...] }
       if (result && Array.isArray(result.data)) {
-        console.log('[getAllRegistrations] 从 result.data 提取数据，数量:', result.data.length)
         return result.data
       }
 
       // 如果响应拦截器已经处理，result.data 可能是对象
       if (result && result.data && typeof result.data === 'object' && result.data.success === true && Array.isArray(result.data.data)) {
-        console.log('[getAllRegistrations] 从 result.data.data 提取数据，数量:', result.data.data.length)
         return result.data.data
       }
 
       // 原始响应格式
       if (result && typeof result === 'object' && result.success === true && Array.isArray(result.data)) {
-        console.log('[getAllRegistrations] 从 result.data 提取数据（success格式），数量:', result.data.length)
         return result.data
       }
 
       // result 本身就是数组
       if (Array.isArray(result)) {
-        console.log('[getAllRegistrations] result 本身就是数组，数量:', result.length)
         return result
       }
 
-      console.warn('[getAllRegistrations] 响应格式不符合预期，返回空数组')
       return []
     } catch (error: unknown) {
       console.error('Get all registrations error:', error)
@@ -1227,30 +1226,25 @@ export const reviewApi = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getVocalRegistrations: async (): Promise<any[]> => {
     try {
-      console.log('[getVocalRegistrations] 请求声乐报名列表')
       // 接口路径：/api/vocal/api/registrations/
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const response = await get<any>(`${API_BASE}/vocal/api/registrations/`)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = response as any
-      console.log('[getVocalRegistrations] 响应数据:', JSON.stringify(result, null, 2))
 
       // 宽松处理响应格式，忽略多余字段
       // 情况1: result.data 是数组（标准格式：{ code: 200, msg: "...", data: [...] }）
       if (result && Array.isArray(result.data)) {
-        console.log('[getVocalRegistrations] 从 result.data 提取数据，数量:', result.data.length)
         return result.data
       }
 
       // 情况2: result.results.data 是数组（分页格式：{ count: 3, results: { code: 200, data: [...] } }）
       if (result && result.results && typeof result.results === 'object' && Array.isArray(result.results.data)) {
-        console.log('[getVocalRegistrations] 从 result.results.data 提取数据，数量:', result.results.data.length)
         return result.results.data
       }
 
       // 情况3: result 本身就是数组
       if (Array.isArray(result)) {
-        console.log('[getVocalRegistrations] result 本身就是数组，数量:', result.length)
         return result
       }
 
@@ -1260,7 +1254,6 @@ export const reviewApi = {
         const possibleArrayFields = ['list', 'items', 'records', 'results']
         for (const field of possibleArrayFields) {
           if (Array.isArray(result.data[field])) {
-            console.log(`[getVocalRegistrations] 从 result.data.${field} 提取数据，数量:`, result.data[field].length)
             return result.data[field]
           }
         }
@@ -1271,20 +1264,11 @@ export const reviewApi = {
         const possibleArrayFields = ['list', 'items', 'records', 'results', 'data']
         for (const field of possibleArrayFields) {
           if (Array.isArray(result[field])) {
-            console.log(`[getVocalRegistrations] 从 result.${field} 提取数据，数量:`, result[field].length)
             return result[field]
           }
         }
       }
 
-      // 如果都不匹配，记录警告但尝试返回空数组
-      console.warn('[getVocalRegistrations] 响应格式不符合预期，返回空数组')
-      console.warn('[getVocalRegistrations] 响应结构:', {
-        isArray: Array.isArray(result),
-        hasData: !!result?.data,
-        dataIsArray: Array.isArray(result?.data),
-        resultKeys: result && typeof result === 'object' ? Object.keys(result) : []
-      })
       return []
     } catch (error: unknown) {
       console.error('Get vocal registrations error:', error)
@@ -1306,13 +1290,11 @@ export const reviewApi = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getDanceRegistrations: async (): Promise<any[]> => {
     try {
-      console.log('[getDanceRegistrations] 请求舞蹈报名列表')
       // 使用统一接口：/api/registrations/all/?program_type=dance
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const response = await get<any>(`${API_BASE}/registrations/all/`, { program_type: 'dance' })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = response as any
-      console.log('[getDanceRegistrations] 响应数据:', JSON.stringify(result, null, 2))
 
       // 处理新的响应格式：{ success: true, message: "...", data: [...] }
       // 响应拦截器可能已经处理了响应，所以 result 可能是 { code: 200, message: "...", data: {...} }
@@ -1320,25 +1302,21 @@ export const reviewApi = {
 
       // 情况1: result.data 是数组（标准格式：{ success: true, message: "...", data: [...] } 或 { code: 200, data: {...} }）
       if (result && Array.isArray(result.data)) {
-        console.log('[getDanceRegistrations] 从 result.data 提取数据，数量:', result.data.length)
         return result.data
       }
 
       // 情况2: result.data 是对象，包含 success 和 data 字段（响应拦截器未处理的情况）
       if (result && result.data && typeof result.data === 'object' && result.data.success === true && Array.isArray(result.data.data)) {
-        console.log('[getDanceRegistrations] 从 result.data.data 提取数据，数量:', result.data.data.length)
         return result.data.data
       }
 
       // 情况3: result 本身包含 success 和 data 字段（原始响应格式）
       if (result && typeof result === 'object' && result.success === true && Array.isArray(result.data)) {
-        console.log('[getDanceRegistrations] 从 result.data 提取数据（success格式），数量:', result.data.length)
         return result.data
       }
 
       // 情况4: result 本身就是数组
       if (Array.isArray(result)) {
-        console.log('[getDanceRegistrations] result 本身就是数组，数量:', result.length)
         return result
       }
 
@@ -1347,7 +1325,6 @@ export const reviewApi = {
         const possibleArrayFields = ['list', 'items', 'records', 'results']
         for (const field of possibleArrayFields) {
           if (Array.isArray(result.data[field])) {
-            console.log(`[getDanceRegistrations] 从 result.data.${field} 提取数据，数量:`, result.data[field].length)
             return result.data[field]
           }
         }
@@ -1358,21 +1335,11 @@ export const reviewApi = {
         const possibleArrayFields = ['list', 'items', 'records', 'results', 'data']
         for (const field of possibleArrayFields) {
           if (Array.isArray(result[field])) {
-            console.log(`[getDanceRegistrations] 从 result.${field} 提取数据，数量:`, result[field].length)
             return result[field]
           }
         }
       }
 
-      // 如果都不匹配，记录警告但尝试返回空数组
-      console.warn('[getDanceRegistrations] 响应格式不符合预期，返回空数组')
-      console.warn('[getDanceRegistrations] 响应结构:', {
-        isArray: Array.isArray(result),
-        hasData: !!result?.data,
-        dataIsArray: Array.isArray(result?.data),
-        hasSuccess: result?.success !== undefined,
-        resultKeys: result && typeof result === 'object' ? Object.keys(result) : []
-      })
       return []
     } catch (error: unknown) {
       console.error('Get dance registrations error:', error)
@@ -1394,46 +1361,37 @@ export const reviewApi = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getReviewRecords: async (): Promise<any[]> => {
     try {
-      console.log('[getReviewRecords] 请求审核记录列表')
       // 接口路径：/api/review/reviews/
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const response = await get<any>(`${API_BASE}/review/reviews/`)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = response as any
-      console.log('[getReviewRecords] 原始响应数据:', JSON.stringify(result, null, 2))
-      console.log('[getReviewRecords] 响应数据类型:', typeof result)
-      console.log('[getReviewRecords] 响应数据keys:', result ? Object.keys(result) : 'null')
 
-      // 处理响应格式：{ success: true, data: [...] }
+      // 处理后端返回格式：{ data: [{ id, object_id, content_type, status, ... }] }
       if (result && Array.isArray(result.data)) {
-        console.log('[getReviewRecords] ✅ 从 result.data 提取数据，数量:', result.data.length)
-        console.log('[getReviewRecords] 审核记录示例:', result.data[0])
         return result.data
       }
 
-      // 如果响应拦截器已经处理，result.data 可能是对象
+      // 如果响应拦截器已经处理，检查 result.data
+      if (result && result.data && typeof result.data === 'object' && Array.isArray(result.data.data)) {
+        return result.data.data
+      }
+
+      // 如果 result.data 是对象且包含 data 数组
       if (result && result.data && typeof result.data === 'object' && result.data.success === true && Array.isArray(result.data.data)) {
-        console.log('[getReviewRecords] ✅ 从 result.data.data 提取数据，数量:', result.data.data.length)
-        console.log('[getReviewRecords] 审核记录示例:', result.data.data[0])
         return result.data.data
       }
 
       // 原始响应格式：{ success: true, data: [...] }
       if (result && typeof result === 'object' && result.success === true && Array.isArray(result.data)) {
-        console.log('[getReviewRecords] ✅ 从 result.data 提取数据（success格式），数量:', result.data.length)
-        console.log('[getReviewRecords] 审核记录示例:', result.data[0])
         return result.data
       }
 
       // 如果 result 本身就是数组
       if (Array.isArray(result)) {
-        console.log('[getReviewRecords] ✅ result 本身就是数组，数量:', result.length)
-        console.log('[getReviewRecords] 审核记录示例:', result[0])
         return result
       }
 
-      console.warn('[getReviewRecords] ❌ 响应格式不符合预期，返回空数组')
-      console.warn('[getReviewRecords] 响应内容:', result)
       return []
     } catch (error: unknown) {
       console.error('Get review records error:', error)
@@ -1445,6 +1403,85 @@ export const reviewApi = {
         console.error('错误响应数据:', response?.data)
       }
       return []
+    }
+  },
+
+  /**
+   * 根据 content_type 和 object_id 查询单个报名详情
+   * @param contentType 内容类型（如 "vocalregistration", "danceregistration", "instrumentalregistration"）
+   * @param objectId 报名记录ID
+   * @returns 报名详情数据
+   */
+  getRegistrationDetail: async (contentType: string, objectId: number): Promise<any | null> => {
+    try {
+      // 将 content_type 映射为 program_type
+      const contentTypeMap: Record<string, string> = {
+        'vocalregistration': 'vocal',
+        'danceregistration': 'dance',
+        'instrumentalregistration': 'instrumental',
+        'operaregistration': 'opera',
+        'recitationregistration': 'recitation',
+        'calligraphyregistration': 'calligraphy',
+        'paintingregistration': 'painting',
+        'designregistration': 'design',
+        'photographyregistration': 'photography',
+        'microfilmregistration': 'microfilm'
+      }
+
+      const programType = contentTypeMap[contentType.toLowerCase()] || ''
+      if (!programType) {
+        console.error('[getRegistrationDetail] 不支持的 content_type:', contentType)
+        return null
+      }
+
+      // 根据不同的 program_type 调用不同的接口
+      let response: any
+      if (programType === 'vocal') {
+        // 声乐：/api/vocal/api/registrations/{id}/
+        response = await get<any>(`${API_BASE}/vocal/api/registrations/${objectId}/`)
+      } else if (programType === 'dance') {
+        // 舞蹈：/api/dance/api/registrations/{id}/ 或 /api/registrations/all/?program_type=dance&id={id}
+        // 先尝试直接查询接口
+        try {
+          response = await get<any>(`${API_BASE}/dance/api/registrations/${objectId}/`)
+        } catch (error) {
+          // 如果失败，尝试从列表接口中查找
+          const allData = await reviewApi.getAllRegistrations('dance')
+          const detail = allData.find((item: any) => item.id === objectId)
+          if (detail) {
+            return detail
+          }
+          throw error
+        }
+      } else if (programType === 'instrumental') {
+        // 器乐：/api/instrumental/api/registrations/{id}/
+        response = await get<any>(`${API_BASE}/instrumental/api/registrations/${objectId}/`)
+      } else {
+        // 其他类型：使用统一接口查询列表，然后根据 ID 过滤
+        const allData = await reviewApi.getAllRegistrations(programType)
+        const detail = allData.find((item: any) => item.id === objectId)
+        return detail || null
+      }
+
+      // 处理响应格式
+      const result = response as any
+      if (result && result.data) {
+        return result.data
+      }
+      if (result && typeof result === 'object' && !Array.isArray(result)) {
+        return result
+      }
+      return null
+    } catch (error: unknown) {
+      console.error('Get registration detail error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+      }
+      return null
     }
   },
 
@@ -1704,16 +1741,84 @@ export const auditApi = {
 export const accountApi = {
   /**
    * 获取账号列表
-   * @returns 账号列表
+   * @param params 查询参数（可选）
+   * @returns 账号列表和分页信息
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getAccounts: async (): Promise<any[]> => {
+  getAccounts: async (params?: { page?: number; page_size?: number }): Promise<{
+    users: any[]
+    total: number
+    page: number
+    page_size: number
+    total_pages: number
+  }> => {
     try {
-      const response = await get(`${API_BASE}/accounts/`)
-      return response.data || []
+      // 接口路径：/api/admin/users/search/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await get<any>(`${API_BASE}/admin/users/search/`, params)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+
+      // 处理后端返回格式：{ success: true, users: [...], total, page_size, page, total_pages }
+      if (result && result.success === true && Array.isArray(result.users)) {
+        return {
+          users: result.users,
+          total: result.total || result.users.length,
+          page: result.page || 1,
+          page_size: result.page_size || result.users.length,
+          total_pages: result.total_pages || 1
+        }
+      }
+
+      // 如果响应拦截器已经处理，检查 result.data
+      if (result && result.data && result.data.success === true && Array.isArray(result.data.users)) {
+        return {
+          users: result.data.users,
+          total: result.data.total || result.data.users.length,
+          page: result.data.page || 1,
+          page_size: result.data.page_size || result.data.users.length,
+          total_pages: result.data.total_pages || 1
+        }
+      }
+
+      // 如果 result.data 是数组（响应拦截器可能将整个响应包装在 data 中）
+      if (result && result.data && typeof result.data === 'object' && result.data.success === true && Array.isArray(result.data.users)) {
+        return {
+          users: result.data.users,
+          total: result.data.total || result.data.users.length,
+          page: result.data.page || 1,
+          page_size: result.data.page_size || result.data.users.length,
+          total_pages: result.data.total_pages || 1
+        }
+      }
+
+      // 如果 result.users 直接是数组
+      if (result && Array.isArray(result.users)) {
+        return {
+          users: result.users,
+          total: result.total || result.users.length,
+          page: result.page || 1,
+          page_size: result.page_size || result.users.length,
+          total_pages: result.total_pages || 1
+        }
+      }
+
+      return {
+        users: [],
+        total: 0,
+        page: 1,
+        page_size: 10,
+        total_pages: 0
+      }
     } catch (error) {
       console.error('Get accounts error:', error)
-      return []
+      return {
+        users: [],
+        total: 0,
+        page: 1,
+        page_size: 10,
+        total_pages: 0
+      }
     }
   },
 
@@ -1761,6 +1866,84 @@ export const accountApi = {
       return response.data?.success || false
     } catch (error) {
       console.error('Delete account error:', error)
+      return false
+    }
+  },
+
+  /**
+   * 启用账号（单个或批量）
+   * @param accounts 账号数组
+   * @returns 是否操作成功
+   */
+  enableAccounts: async (accounts: string[]): Promise<boolean> => {
+    try {
+      // 接口路径：/api/admin/users/enable/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>(`${API_BASE}/admin/users/enable/`, {
+        accounts: accounts
+      })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+
+      // 处理后端返回格式：{ success: true, message: "..." } 或 { code: 200, ... }
+      if (result && (result.success === true || result.code === 200)) {
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('Enable accounts error:', error)
+      return false
+    }
+  },
+
+  /**
+   * 停用/锁定账号（单个或批量）
+   * @param accounts 账号数组
+   * @returns 是否操作成功
+   */
+  disableAccounts: async (accounts: string[]): Promise<boolean> => {
+    try {
+      // 接口路径：/api/admin/users/lock/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>(`${API_BASE}/admin/users/lock/`, {
+        accounts: accounts
+      })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+
+      // 处理后端返回格式：{ success: true, message: "..." } 或 { code: 200, ... }
+      if (result && (result.success === true || result.code === 200)) {
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('Disable accounts error:', error)
+      return false
+    }
+  },
+
+  /**
+   * 解锁账号（单个或批量）- 解开因密码错误被锁定的账号
+   * @param accounts 账号数组
+   * @returns 是否操作成功
+   */
+  unlockAccounts: async (accounts: string[]): Promise<boolean> => {
+    try {
+      // 接口路径：/api/admin/users/unlock/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>(`${API_BASE}/admin/users/unlock/`, {
+        accounts: accounts
+      })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+
+      // 处理后端返回格式：{ success: true, message: "..." } 或 { code: 200, ... }
+      if (result && (result.success === true || result.code === 200)) {
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('Unlock accounts error:', error)
       return false
     }
   }

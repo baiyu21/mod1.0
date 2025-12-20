@@ -32,6 +32,17 @@ function createAxiosInstance(baseURL: string): AxiosInstance {
       const token = getUserToken()
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`
+        // 调试：打印请求信息（仅开发环境）
+        if (import.meta.env.DEV) {
+          // 只显示相对路径，不显示完整 URL
+          const urlPath = config.url?.replace(/^https?:\/\/[^/]+/, '') || config.url
+          console.log('[Request] 请求路径:', urlPath)
+          console.log('[Request] 请求方法:', config.method)
+          console.log('[Request] Token 已添加:', token ? `${token.substring(0, 20)}...` : '无')
+          console.log('[Request] Authorization Header:', config.headers.Authorization ? `${config.headers.Authorization.substring(0, 30)}...` : '无')
+        }
+      } else {
+        console.warn('[Request] 未找到 token，请求可能失败:', config.url)
       }
       return config
     },
@@ -63,12 +74,8 @@ function createAxiosInstance(baseURL: string): AxiosInstance {
       // 如果后端返回的数据有 success 字段，按 success 字段处理
       if (res && typeof res === 'object' && 'success' in res) {
         if (res.success === true) {
-          // 成功：返回统一格式 { code: 200, message: "...", data: [...] }
-          return {
-            code: 200,
-            message: res.message || 'success',
-            data: res.data
-          }
+          // 成功：返回整个响应对象，保留所有字段（users, total, page 等）
+          return res
         } else {
           // 失败：显示错误信息
           ElMessage.error(res.message || '请求失败')
@@ -81,71 +88,6 @@ function createAxiosInstance(baseURL: string): AxiosInstance {
       return { code: 200, message: 'success', data: res }
     },
     (error) => {
-      // HTTP 错误处理
-      if (error.response) {
-        const status = error.response.status
-        const message = error.response.data?.message || error.message
-
-        switch (status) {
-          case 400:
-            // 400错误：请求参数错误，显示详细错误信息
-            const errorData = error.response.data
-            const errorDetails = errorData?.detail || errorData?.errors || errorData?.message || message
-            console.error('400 错误详情:', {
-              status: error.response.status,
-              data: errorData,
-              url: error.config?.url,
-              method: error.config?.method,
-              requestData: error.config?.data ? (typeof error.config.data === 'string' ? JSON.parse(error.config.data) : error.config.data) : null
-            })
-            ElMessage.error(`请求参数错误: ${typeof errorDetails === 'object' ? JSON.stringify(errorDetails) : errorDetails}`)
-            break
-          case 401:
-            // 未授权：清除 token 并跳转到登录页
-            ElMessage.error('登录已过期，请重新登录')
-            clearUserStorage()
-            window.location.href = '/login'
-            break
-          case 403:
-            ElMessage.error('没有权限访问')
-            break
-          case 404:
-            // 404错误：检查后端是否返回了具体的错误消息
-            const notFoundData = error.response.data
-            const notFoundMessage = notFoundData?.message || notFoundData?.detail || '请求的资源不存在'
-            console.error('404 错误详情:', {
-              status: error.response.status,
-              data: notFoundData,
-              url: error.config?.url,
-              method: error.config?.method,
-              requestData: error.config?.data ? (typeof error.config.data === 'string' ? JSON.parse(error.config.data) : error.config.data) : null
-            })
-            // 不在这里显示错误消息，让调用方处理（因为可能需要在特定位置显示）
-            // ElMessage.error(notFoundMessage)
-            break
-          case 500:
-            // 服务器内部错误，显示更详细的错误信息
-            const errorDetail = error.response.data?.detail || error.response.data?.message || '服务器内部错误，请查看控制台获取详细信息'
-            ElMessage.error(`服务器错误: ${errorDetail}`)
-            console.error('500 错误详情:', {
-              status: error.response.status,
-              data: error.response.data,
-              url: error.config?.url,
-              method: error.config?.method,
-              params: error.config?.data
-            })
-            break
-          default:
-            ElMessage.error(message || `请求失败 (${status})`)
-        }
-      } else if (error.request) {
-        // 请求已发出但没有收到响应
-        ElMessage.error('网络错误，请检查网络连接')
-      } else {
-        // 其他错误
-        ElMessage.error(error.message || '请求失败')
-      }
-
       return Promise.reject(error)
     }
   )
@@ -154,8 +96,11 @@ function createAxiosInstance(baseURL: string): AxiosInstance {
 }
 
 // 默认实例（可根据环境变量配置 baseURL）
-// 开发环境和生产环境都直接使用完整 URL
-const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://c369ec45.natappfree.cc'
+// 开发环境：强制使用空字符串，让请求通过 Vite 代理（避免 CORS 问题）
+// 生产环境：使用环境变量或默认完整 URL
+const baseURL = import.meta.env.DEV
+  ? '' // 开发环境使用相对路径，通过 Vite 代理
+  : (import.meta.env.VITE_API_BASE_URL || 'http://c369ec45.natappfree.cc') // 生产环境使用完整 URL
 export const request = createAxiosInstance(baseURL)
 
 /**
@@ -182,7 +127,8 @@ export function get<T = any>(
   params?: any,
   config?: AxiosRequestConfig
 ): Promise<ApiResponse<T>> {
-  return request.get<ApiResponse<T>>(url, { params, ...config }).then((res) => res.data)
+  // 响应拦截器已经返回了处理后的数据，直接返回（不再提取 .data）
+  return request.get<ApiResponse<T>>(url, { params, ...config }).then((res) => res)
 }
 
 /**

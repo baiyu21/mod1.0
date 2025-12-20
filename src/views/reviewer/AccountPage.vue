@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, ElUpload } from 'element-plus'
 import { Download, Upload } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules, UploadFile, UploadFiles } from 'element-plus'
+import { accountApi } from '@/services/api'
 
 // 账号类型定义
 type Account = {
@@ -14,61 +15,91 @@ type Account = {
   email?: string
   phone?: string
   createTime?: string
+  account?: string  // 后端返回的账号字段
+  is_active?: boolean  // 后端返回的激活状态
+  is_locked?: boolean  // 后端返回的锁定状态
 }
 
 // 账号列表数据
-const accountList = ref<Account[]>([
-  {
-    id: '1',
-    username: 'user001',
-    universityName: 'A大学',
-    role: 'user',
-    status: 'active',
-    email: 'user001@example.com',
-    phone: '13800138000',
-    createTime: '2024-01-01'
-  },
-  {
-    id: '2',
-    username: 'user002',
-    universityName: 'B大学',
-    role: 'user',
-    status: 'active',
-    email: 'user002@example.com',
-    phone: '13900139000',
-    createTime: '2024-01-02'
-  },
-  {
-    id: '3',
-    username: 'reviewer001',
-    universityName: 'C大学',
-    role: 'approval',
-    status: 'locked',
-    email: 'reviewer001@example.com',
-    phone: '13700137000',
-    createTime: '2024-01-03'
-  },
-  {
-    id: '4',
-    username: 'user003',
-    universityName: 'D大学',
-    role: 'user',
-    status: 'disabled',
-    email: 'user003@example.com',
-    phone: '13600136000',
-    createTime: '2024-01-04'
-  },
-  {
-    id: '5',
-    username: 'admin001',
-    universityName: '系统管理员',
-    role: 'admin',
-    status: 'active',
-    email: 'admin001@example.com',
-    phone: '13500135000',
-    createTime: '2024-01-05'
-  },
-])
+const accountList = ref<Account[]>([])
+const loading = ref(false)
+
+// 分页信息
+const pagination = ref({
+  currentPage: 1,
+  pageSize: 10,
+  total: 0,
+  totalPages: 0
+})
+
+// 加载账号列表
+const loadAccounts = async () => {
+  loading.value = true
+  try {
+    const result = await accountApi.getAccounts({
+      page: pagination.value.currentPage,
+      page_size: pagination.value.pageSize
+    })
+
+    // 将后端数据映射到前端格式
+    accountList.value = result.users.map((user: any) => {
+      // 角色映射：后端返回 'reviewer' -> 前端 'approval'，'logger' -> 'logaudit'
+      let role: Account['role'] = 'user'
+      if (user.role === 'reviewer') {
+        role = 'approval'
+      } else if (user.role === 'logger') {
+        role = 'logaudit'
+      } else if (user.role === 'admin') {
+        role = 'admin'
+      } else if (user.role === 'user') {
+        role = 'user'
+      }
+
+      // 状态映射：优先检查 is_locked（锁定），然后检查 is_active（停用），最后检查 status 字段
+      // 锁定状态：is_locked = true 或 status = '锁定'
+      // 停用状态：is_active = false 且 is_locked = false，或 status = '停用'
+      // 正常状态：is_active = true 且 is_locked = false，或 status = '正常'
+      let status: Account['status'] = 'active'
+      if (user.is_locked || user.status === '锁定') {
+        status = 'locked'  // 锁定状态（因密码错误被锁定）
+      } else if (!user.is_active || user.status === '停用') {
+        status = 'disabled'  // 停用状态（管理员手动停用）
+      } else {
+        status = 'active'  // 正常状态
+      }
+
+      return {
+        id: user.account || String(Math.random()), // 使用 account 作为 id
+        username: user.username || '',
+        universityName: user.universityName || '',
+        role: role,
+        status: status,
+        email: user.modifier_name || undefined, // 修改人姓名
+        phone: user.modifier_contact || undefined, // 修改人联系方式
+        createTime: user.created_at ? new Date(user.created_at).toISOString().split('T')[0] : undefined,
+        account: user.account,
+        is_active: user.is_active,
+        is_locked: user.is_locked
+      }
+    })
+
+    // 更新分页信息
+    pagination.value.total = result.total
+    pagination.value.totalPages = result.total_pages
+    pagination.value.currentPage = result.page
+    pagination.value.pageSize = result.page_size
+  } catch (error) {
+    console.error('加载账号列表失败:', error)
+    ElMessage.error('加载账号列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 页面加载时获取账号列表
+onMounted(() => {
+  loadAccounts()
+})
 
 const multipleSelection = ref<Account[]>([])
 
@@ -98,8 +129,9 @@ const statusOptions = [
 const filteredAccountList = computed(() => {
   return accountList.value.filter(account => {
     const keywordMatch = !keyword.value ||
-      account.username.includes(keyword.value) ||
-      account.universityName.includes(keyword.value) ||
+      account.username?.includes(keyword.value) ||
+      account.account?.includes(keyword.value) ||
+      account.universityName?.includes(keyword.value) ||
       account.email?.includes(keyword.value) ||
       account.phone?.includes(keyword.value)
     const roleMatch = !filterRole.value || account.role === filterRole.value
@@ -375,91 +407,228 @@ function submitChangePassword() {
   })
 }
 
-// 停用账号
-function disableAccount(row: Account) {
+// 启用账号（单个）
+async function enableAccount(row: Account) {
+  if (!row.account) {
+    ElMessage.error('账号信息异常，无法启用')
+    return
+  }
+
   ElMessageBox.confirm(
-    `确定要停用账号 "${row.username}" (${row.universityName}) 吗？`,
+    `确定要启用账号 "${row.account}" 吗？`,
+    '启用账号',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  ).then(async () => {
+    try {
+      const success = await accountApi.enableAccounts([row.account!])
+      if (success) {
+        ElMessage.success('账号已启用')
+        // 刷新列表
+        await loadAccounts()
+      } else {
+        ElMessage.error('启用账号失败')
+      }
+    } catch (error) {
+      console.error('启用账号失败:', error)
+      ElMessage.error('启用账号失败')
+    }
+  }).catch(() => {})
+}
+
+// 批量启用账号
+async function batchEnableAccount() {
+  if (multipleSelection.value.length === 0) {
+    ElMessage.warning('请先选择要启用的账号')
+    return
+  }
+
+  const accounts = multipleSelection.value
+    .map(acc => acc.account)
+    .filter((account): account is string => !!account)
+
+  if (accounts.length === 0) {
+    ElMessage.warning('所选账号中没有有效的账号信息')
+    return
+  }
+
+  const accountNames = accounts.join('、')
+  ElMessageBox.confirm(
+    `确定要启用以下 ${accounts.length} 个账号吗？\n${accountNames}`,
+    '批量启用账号',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  ).then(async () => {
+    try {
+      const success = await accountApi.enableAccounts(accounts)
+      if (success) {
+        ElMessage.success(`已批量启用 ${accounts.length} 个账号`)
+        multipleSelection.value = []
+        // 刷新列表
+        await loadAccounts()
+      } else {
+        ElMessage.error('批量启用账号失败')
+      }
+    } catch (error) {
+      console.error('批量启用账号失败:', error)
+      ElMessage.error('批量启用账号失败')
+    }
+  }).catch(() => {})
+}
+
+// 停用账号（单个）
+async function disableAccount(row: Account) {
+  if (!row.account) {
+    ElMessage.error('账号信息异常，无法停用')
+    return
+  }
+
+  ElMessageBox.confirm(
+    `确定要停用账号 "${row.account}" 吗？`,
     '停用账号',
     {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     }
-  ).then(() => {
-    accountList.value = accountList.value.map(acc =>
-      acc.id === row.id ? { ...acc, status: 'disabled' as const } : acc
-    )
-    ElMessage.success('账号已停用')
+  ).then(async () => {
+    try {
+      const success = await accountApi.disableAccounts([row.account!])
+      if (success) {
+        ElMessage.success('账号已停用')
+        // 刷新列表
+        await loadAccounts()
+      } else {
+        ElMessage.error('停用账号失败')
+      }
+    } catch (error) {
+      console.error('停用账号失败:', error)
+      ElMessage.error('停用账号失败')
+    }
   }).catch(() => {})
 }
 
 // 批量停用账号
-function batchDisableAccount() {
+async function batchDisableAccount() {
   if (multipleSelection.value.length === 0) {
     ElMessage.warning('请先选择要停用的账号')
     return
   }
 
-  const usernames = multipleSelection.value.map(acc => acc.username).join('、')
+  const accounts = multipleSelection.value
+    .map(acc => acc.account)
+    .filter((account): account is string => !!account)
+
+  if (accounts.length === 0) {
+    ElMessage.warning('所选账号中没有有效的账号信息')
+    return
+  }
+
+  const accountNames = accounts.join('、')
   ElMessageBox.confirm(
-    `确定要停用以下 ${multipleSelection.value.length} 个账号吗？\n${usernames}`,
+    `确定要停用以下 ${accounts.length} 个账号吗？\n${accountNames}`,
     '批量停用账号',
     {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     }
-  ).then(() => {
-    const ids = new Set(multipleSelection.value.map(acc => acc.id))
-    accountList.value = accountList.value.map(acc =>
-      ids.has(acc.id) ? { ...acc, status: 'disabled' as const } : acc
-    )
-    ElMessage.success(`已批量停用 ${ids.size} 个账号`)
-    multipleSelection.value = []
+  ).then(async () => {
+    try {
+      const success = await accountApi.disableAccounts(accounts)
+      if (success) {
+        ElMessage.success(`已批量停用 ${accounts.length} 个账号`)
+        multipleSelection.value = []
+        // 刷新列表
+        await loadAccounts()
+      } else {
+        ElMessage.error('批量停用账号失败')
+      }
+    } catch (error) {
+      console.error('批量停用账号失败:', error)
+      ElMessage.error('批量停用账号失败')
+    }
   }).catch(() => {})
 }
 
-// 解锁账号
-function unlockAccount(row: Account) {
+// 解锁账号（解开因密码错误被锁定的账号）
+async function unlockAccount(row: Account) {
+  if (!row.account) {
+    ElMessage.error('账号信息异常，无法解锁')
+    return
+  }
+
   ElMessageBox.confirm(
-    `确定要解锁账号 "${row.username}" (${row.universityName}) 吗？`,
+    `确定要解锁账号 "${row.account}" 吗？`,
     '解锁账号',
     {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     }
-  ).then(() => {
-    accountList.value = accountList.value.map(acc =>
-      acc.id === row.id ? { ...acc, status: 'active' as const } : acc
-    )
-    ElMessage.success('账号已解锁')
+  ).then(async () => {
+    try {
+      const success = await accountApi.unlockAccounts([row.account!])
+      if (success) {
+        ElMessage.success('账号已解锁')
+        // 刷新列表
+        await loadAccounts()
+      } else {
+        ElMessage.error('解锁账号失败')
+      }
+    } catch (error) {
+      console.error('解锁账号失败:', error)
+      ElMessage.error('解锁账号失败')
+    }
   }).catch(() => {})
 }
 
-// 批量解锁账号
-function batchUnlockAccount() {
+// 批量解锁账号（解开因密码错误被锁定的账号）
+async function batchUnlockAccount() {
   if (multipleSelection.value.length === 0) {
     ElMessage.warning('请先选择要解锁的账号')
     return
   }
 
-  const usernames = multipleSelection.value.map(acc => acc.username).join('、')
+  const accounts = multipleSelection.value
+    .map(acc => acc.account)
+    .filter((account): account is string => !!account)
+
+  if (accounts.length === 0) {
+    ElMessage.warning('所选账号中没有有效的账号信息')
+    return
+  }
+
+  const accountNames = accounts.join('、')
   ElMessageBox.confirm(
-    `确定要解锁以下 ${multipleSelection.value.length} 个账号吗？\n${usernames}`,
+    `确定要解锁以下 ${accounts.length} 个账号吗？\n${accountNames}`,
     '批量解锁账号',
     {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     }
-  ).then(() => {
-    const ids = new Set(multipleSelection.value.map(acc => acc.id))
-    accountList.value = accountList.value.map(acc =>
-      ids.has(acc.id) && acc.status === 'locked' ? { ...acc, status: 'active' as const } : acc
-    )
-    ElMessage.success(`已批量解锁 ${ids.size} 个账号`)
-    multipleSelection.value = []
+  ).then(async () => {
+    try {
+      const success = await accountApi.unlockAccounts(accounts)
+      if (success) {
+        ElMessage.success(`已批量解锁 ${accounts.length} 个账号`)
+        multipleSelection.value = []
+        // 刷新列表
+        await loadAccounts()
+      } else {
+        ElMessage.error('批量解锁账号失败')
+      }
+    } catch (error) {
+      console.error('批量解锁账号失败:', error)
+      ElMessage.error('批量解锁账号失败')
+    }
   }).catch(() => {})
 }
 </script>
@@ -471,13 +640,16 @@ function batchUnlockAccount() {
         <div class="card-header">
           <span>账号管理</span>
           <div class="header-actions">
+            <el-button @click="loadAccounts" :loading="loading">
+              刷新
+            </el-button>
             <el-button type="primary" @click="openCreateAccountDialog">
               创建账号
             </el-button>
             <el-button type="success" :icon="Upload" @click="openImportAccountDialog">
               批量导入
             </el-button>
-            <el-button type="success" @click="batchUnlockAccount">
+            <el-button type="success" @click="batchEnableAccount">
               批量启用
             </el-button>
             <el-button type="warning" @click="batchDisableAccount">
@@ -495,7 +667,7 @@ function batchUnlockAccount() {
       <div class="filters">
         <el-input
           v-model="keyword"
-          placeholder="搜索用户名、大学名称、邮箱或手机号"
+          placeholder="搜索账号、用户名、大学名称、邮箱或手机号"
           clearable
           style="max-width: 300px"
         />
@@ -519,6 +691,7 @@ function batchUnlockAccount() {
 
       <!-- 账号列表表格 -->
       <el-table
+        v-loading="loading"
         :data="filteredAccountList"
         @selection-change="handleSelectionChange"
         stripe
@@ -526,9 +699,21 @@ function batchUnlockAccount() {
         style="margin-top: 16px"
       >
         <el-table-column type="selection" width="50" />
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="username" label="用户名" min-width="150" />
-        <el-table-column prop="universityName" label="大学名称" min-width="180" />
+        <el-table-column prop="account" label="账号" min-width="150">
+          <template #default="{ row }">
+            {{ row.account || row.id }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="username" label="用户名" min-width="150">
+          <template #default="{ row }">
+            {{ row.username || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="universityName" label="大学名称" min-width="180">
+          <template #default="{ row }">
+            {{ row.universityName || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="role" label="角色" width="120">
           <template #default="{ row }">
             {{ getRoleText(row.role) }}
@@ -541,9 +726,21 @@ function batchUnlockAccount() {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="email" label="修改人账号" min-width="200" />
-        <el-table-column prop="phone" label="修改人手机号" width="130" />
-        <el-table-column prop="createTime" label="创建时间" width="120" />
+        <el-table-column prop="email" label="修改人姓名" min-width="150">
+          <template #default="{ row }">
+            {{ row.email || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="phone" label="修改人联系方式" width="150">
+          <template #default="{ row }">
+            {{ row.phone || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="createTime" label="创建时间" width="120">
+          <template #default="{ row }">
+            {{ row.createTime || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button
@@ -573,7 +770,7 @@ function batchUnlockAccount() {
               v-if="row.status === 'disabled'"
               size="small"
               type="success"
-              @click="accountList = accountList.map(acc => acc.id === row.id ? { ...acc, status: 'active' } : acc)"
+              @click="enableAccount(row)"
             >
               启用
             </el-button>
