@@ -14,10 +14,10 @@
     <el-card shadow="never" class="ef-section-card sec-1">
       <template #header><div class="ef-card-title"><span>作品信息</span></div></template>
       <div class="ef-sec-watermark">1</div>
-      <el-form :model="baseForm" label-width="120px" :disabled="readonly" class="ef-base-form">
+      <el-form ref="formRef" :model="baseForm" :rules="formRules" label-width="120px" :disabled="readonly" class="ef-base-form">
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="项目名称">
+            <el-form-item label="项目名称" prop="projectName">
               <el-input v-model="baseForm.projectName" placeholder="请输入项目名称" />
             </el-form-item>
           </el-col>
@@ -29,7 +29,7 @@
         </el-row>
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="联系人职务">
+            <el-form-item label="联系人职务" prop="contactPosition">
               <el-input v-model="baseForm.contactPosition" placeholder="请输入联系人职务" />
             </el-form-item>
           </el-col>
@@ -41,7 +41,7 @@
         </el-row>
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="联系人单位">
+            <el-form-item label="联系人单位" prop="contactUnit">
               <el-input v-model="baseForm.contactUnit" placeholder="请输入联系人单位" />
             </el-form-item>
           </el-col>
@@ -58,7 +58,7 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="类别">
+            <el-form-item label="类别" prop="category">
               <el-select v-model="baseForm.category" placeholder="请选择" style="width: 100%">
                 <el-option label="艺术与科技" value="art-tech" />
                 <el-option label="艺术与校园" value="art-campus" />
@@ -195,6 +195,18 @@ const emit = defineEmits<{ (e: 'submit', payload: SubmitPayload): void }>()
 // 表单引用和验证规则
 const formRef = ref<FormInstance>()
 const formRules: FormRules = {
+  projectName: [
+    { required: true, message: '请输入项目名称', trigger: 'blur' }
+  ],
+  contactPosition: [
+    { required: true, message: '请输入联系人职务', trigger: 'blur' }
+  ],
+  contactUnit: [
+    { required: true, message: '请输入联系人单位', trigger: 'blur' }
+  ],
+  category: [
+    { required: true, message: '请选择类别', trigger: 'change' }
+  ],
   contact: commonRules.contactName,
   phone: commonRules.phone,
   address: commonRules.address,

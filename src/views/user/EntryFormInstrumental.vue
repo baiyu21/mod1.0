@@ -605,4 +605,26 @@ const onSubmit = async () => {
   padding: 24px;
   background: #fdf6f6;
 }
+
+// 确保表单标签左对齐和星号占位生效（覆盖 scoped 限制）
+:deep(.ef-base-form) {
+  .el-form-item__label {
+    text-align: left !important;
+    justify-content: flex-start !important;
+
+    // 为所有 label 添加星号占位（包括非必填字段）
+    &::before {
+      content: '*';
+      color: transparent; // 非必填字段使用透明星号占位
+      margin-right: 4px;
+      display: inline-block;
+      width: 8px; // 固定宽度保持对齐
+    }
+
+    // 必填字段显示红色星号
+    &.is-required::before {
+      color: var(--el-color-danger) !important;
+    }
+  }
+}
 </style>

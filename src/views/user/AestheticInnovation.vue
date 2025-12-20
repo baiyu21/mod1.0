@@ -14,10 +14,10 @@
     <el-card shadow="never" class="ef-section-card sec-1">
       <template #header><div class="ef-card-title"><span>作品信息</span></div></template>
       <div class="ef-sec-watermark">1</div>
-      <el-form :model="baseForm" label-width="120px" :disabled="readonly" class="ef-base-form">
+      <el-form ref="formRef" :model="baseForm" :rules="formRules" label-width="120px" :disabled="readonly" class="ef-base-form">
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="案例名称">
+            <el-form-item label="案例名称" prop="caseName">
               <el-input v-model="baseForm.caseName" placeholder="请输入案例名称" />
             </el-form-item>
           </el-col>
@@ -29,7 +29,7 @@
         </el-row>
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="负责人职称">
+            <el-form-item label="负责人职称" prop="leaderTitle">
               <el-input v-model="baseForm.leaderTitle" placeholder="请输入负责人职称" />
             </el-form-item>
           </el-col>
@@ -41,19 +41,19 @@
         </el-row>
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="案例代码">
+            <el-form-item label="案例代码" prop="caseCode">
               <el-input v-model="baseForm.caseCode" placeholder="请输入案例代码" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="报送单位">
+            <el-form-item label="报送单位" prop="submitUnit">
               <el-input v-model="baseForm.submitUnit" placeholder="请输入报送单位" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="负责人单位">
+            <el-form-item label="负责人单位" prop="leaderUnit">
               <el-input v-model="baseForm.leaderUnit" placeholder="请输入负责人单位" />
             </el-form-item>
           </el-col>
@@ -65,7 +65,7 @@
         </el-row>
         <el-row :gutter="24">
           <el-col :span="12">
-            <el-form-item label="类别（选题方向）">
+            <el-form-item label="类别（选题方向）" prop="category">
               <el-select v-model="baseForm.category" placeholder="请选择" style="width: 100%">
                 <el-option label="高校美育教师队伍建设" value="teacher-team" />
                 <el-option label="高校公共艺术课程建设与教学改革" value="public-art-course" />
@@ -168,6 +168,24 @@ const emit = defineEmits<{ (e: 'submit', payload: SubmitPayload): void }>()
 // 表单引用和验证规则
 const formRef = ref<FormInstance>()
 const formRules: FormRules = {
+  caseName: [
+    { required: true, message: '请输入案例名称', trigger: 'blur' }
+  ],
+  leaderTitle: [
+    { required: true, message: '请输入负责人职称', trigger: 'blur' }
+  ],
+  caseCode: [
+    { required: true, message: '请输入案例代码', trigger: 'blur' }
+  ],
+  submitUnit: [
+    { required: true, message: '请输入报送单位', trigger: 'blur' }
+  ],
+  leaderUnit: [
+    { required: true, message: '请输入负责人单位', trigger: 'blur' }
+  ],
+  category: [
+    { required: true, message: '请选择类别（选题方向）', trigger: 'change' }
+  ],
   leaderName: commonRules.contactName,
   leaderPhone: commonRules.phone,
   email: commonRules.email
