@@ -11,7 +11,7 @@ import { InfoFilled } from '@element-plus/icons-vue'
 import { calculateTotalMemberCount, checkMemberLimit, getMemberLimitInfo } from '@/utils/memberLimit'
 import { useTips } from '@/composables/useTips'
 import { commonRules } from '@/composables/useForm'
-import { registrationApi, registrationGuideApi } from '@/services/api'
+import { registrationApi } from '@/services/api'
 
 // 定义类型接口
 interface BaseForm {
@@ -295,32 +295,22 @@ const transformParticipants = (members: RosterItem[]) => {
 }
 
 // 下载报名须知
-const downloadNotice = async () => {
+const downloadNotice = () => {
   try {
-    ElMessage.info('正在下载报名须知...')
-    const blob = await registrationGuideApi.downloadNotice()
-
-    // 创建下载链接
-    const url = URL.createObjectURL(blob)
+    // 创建下载链接，直接指向 public 目录下的文件
     const link = document.createElement('a')
-    link.href = url
+    link.href = '/报名须知.pdf'
     link.download = '报名须知.pdf'
+    link.target = '_blank'
 
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    URL.revokeObjectURL(url)
 
     ElMessage.success('下载成功')
   } catch (error: unknown) {
     console.error('下载报名须知失败:', error)
-    let errorMessage = '下载失败，请稍后重试'
-
-    if (error && typeof error === 'object' && 'message' in error) {
-      errorMessage = (error as Error).message
-    }
-
-    ElMessage.error(errorMessage)
+    ElMessage.error('下载失败，请稍后重试')
   }
 }
 
