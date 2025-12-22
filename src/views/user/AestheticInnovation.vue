@@ -101,7 +101,18 @@
         <p style="color: red">请仔细阅读报名须知，确认无误后勾选报名须知，即可进行报名。</p>
         <el-row :gutter="34">
           <el-col :span="12">
-            <el-form-item label="报名须知" prop="notice">
+            <el-form-item prop="notice">
+              <template #label>
+                <span>报名须知</span>
+                <el-link
+                  type="primary"
+                  :underline="false"
+                  @click.prevent="downloadNotice"
+                  style="margin-left: 8px; font-size: 14px;"
+                >
+                  （点击下载）
+                </el-link>
+              </template>
               <el-checkbox v-model="baseForm.notice" required>我已仔细阅读并同意报名须知</el-checkbox>
             </el-form-item>
           </el-col>
@@ -121,6 +132,7 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { InfoFilled } from '@element-plus/icons-vue'
 import FileUploadBlock from '@/components/FileUploadBlock.vue'
 import { commonRules } from '@/composables/useForm'
+import { registrationGuideApi } from '@/services/api'
 
 interface BaseForm {
   caseName: string
@@ -230,6 +242,36 @@ const onSave = () => {
     ElMessage.error('暂存失败，请重试')
   }
 }
+// 下载报名须知
+const downloadNotice = async () => {
+  try {
+    ElMessage.info('正在下载报名须知...')
+    const blob = await registrationGuideApi.downloadNotice()
+
+    // 创建下载链接
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = '报名须知.pdf'
+
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    ElMessage.success('下载成功')
+  } catch (error: unknown) {
+    console.error('下载报名须知失败:', error)
+    let errorMessage = '下载失败，请稍后重试'
+
+    if (error && typeof error === 'object' && 'message' in error) {
+      errorMessage = (error as Error).message
+    }
+
+    ElMessage.error(errorMessage)
+  }
+}
+
 const onSubmit = async () => {
   // 检查是否已同意报名须知
   if (!baseForm.notice) {

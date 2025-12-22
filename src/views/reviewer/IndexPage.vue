@@ -2,7 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Download, Upload } from '@element-plus/icons-vue'
-import { registrationApi } from '@/services/api'
+import { registrationApi, accountApi, reviewApi } from '@/services/api'
+import { useUserStore } from '@/stores/user'
 
 // 后端返回的大学统计数据
 interface UniversityStat {
@@ -116,7 +117,15 @@ function getStatusType(status: '已通过' | '已驳回' | '待审核') {
 }
 
 // 导出报名表相关
+const selectedUser = ref('')
 const selectedCategory = ref('')
+const userList = ref<any[]>([])
+const userListLoading = ref(false)
+const userStore = useUserStore()
+
+// 判断是否是管理员（只有管理员才能使用用户筛选功能）
+const isAdmin = computed(() => userStore.role === 'admin')
+
 // 节目类型选项（用户端的12个类型）
 const categoryOptions = [
   { label: '全部', value: '' },
@@ -133,6 +142,23 @@ const categoryOptions = [
   { label: '艺术实践工作坊报名', value: '艺术实践工作坊报名' },
   { label: '美育改革创新优秀案例申报', value: '美育改革创新优秀案例申报' }
 ]
+
+// 将前端类别选项值映射到后端 program_type 值
+function mapCategoryToProgramType(category: string): string | null {
+  const categoryMap: Record<string, string> = {
+    '声乐报名': 'vocal',
+    '器乐报名': 'instrumental',
+    '舞蹈报名': 'dance',
+    '戏曲报名': 'opera',
+    '书法作品': 'calligraphy',
+    '绘画作品': 'painting',
+    '设计作品': 'design',
+    '摄影作品': 'photography',
+    '微电影作品': 'micro_film',
+    '艺术实践工作坊报名': 'workshop'
+  }
+  return categoryMap[category] || null
+}
 
 // 导出盖章报名表对话框
 type StampedFormItem = {
@@ -170,20 +196,110 @@ function singleExportStamped(id: string) {
 
 // 导出所有报名表
 function exportAllRegistrationForms() {
-  ElMessage.success('正在导出所有报名表...')
-  // TODO: 实现导出逻辑
+  const userInfo = selectedUser.value
+    ? userList.value.find(u => u.account === selectedUser.value)
+    : null
+  const userLabel = userInfo ? (userInfo.username || userInfo.account) : '全部'
+
+  ElMessage.success(`正在导出${selectedUser.value ? `用户"${userLabel}"的` : ''}所有报名表...`)
+  // TODO: 实现导出逻辑，传递 selectedUser.value 和 selectedCategory.value
 }
 
-// 导出选中类别报名表
-function exportSelectedCategoryForms() {
-  if (!selectedCategory.value) {
-    ElMessage.warning('请先选择类别')
+// 导出选中类别报名表（支持按用户和按类型导出）
+async function exportSelectedCategoryForms() {
+  // 检查是否选择了用户或类别
+  if (!selectedUser.value && !selectedCategory.value) {
+    ElMessage.warning('请至少选择用户或类别')
     return
   }
-  ElMessage.success(
-    `正在导出${categoryOptions.find((opt) => opt.value === selectedCategory.value)?.label}报名表...`,
-  )
-  // TODO: 实现导出逻辑
+
+  try {
+    let blob: Blob
+    let fileName = '报名材料'
+
+    // 优先按用户导出（如果选择了用户）
+    if (selectedUser.value) {
+      const userInfo = userList.value.find(u => u.account === selectedUser.value)
+      if (!userInfo) {
+        ElMessage.error('用户信息不完整，无法导出')
+        return
+      }
+
+      // 尝试获取用户ID：优先使用 id，其次使用 user_id，最后尝试将 account 转换为数字
+      let userId: number | undefined
+      if (userInfo.id && typeof userInfo.id === 'number') {
+        userId = userInfo.id
+      } else if (userInfo.user_id && typeof userInfo.user_id === 'number') {
+        userId = userInfo.user_id
+      } else if (userInfo.account && !isNaN(Number(userInfo.account))) {
+        userId = Number(userInfo.account)
+      }
+
+      if (!userId) {
+        ElMessage.error('无法获取用户ID，请检查用户信息')
+        return
+      }
+
+      const userLabel = userInfo.username || userInfo.account
+      fileName = `报名材料_用户_${userLabel}`
+
+      ElMessage.info(`正在导出用户"${userLabel}"的报名材料...`)
+
+      // 调用按用户导出接口
+      blob = await reviewApi.exportMaterials({
+        export_type: 'user',
+        user_id: userId
+      })
+    } else if (selectedCategory.value) {
+      // 按节目类型导出
+      const programType = mapCategoryToProgramType(selectedCategory.value)
+
+      if (!programType) {
+        ElMessage.warning('该类别暂不支持导出，请选择其他类别')
+        return
+      }
+
+      const categoryLabel = categoryOptions.find((opt) => opt.value === selectedCategory.value)?.label || ''
+      fileName = `报名材料_类别_${categoryLabel}`
+
+      ElMessage.info(`正在导出${categoryLabel}的报名材料...`)
+
+      // 调用按节目类型导出接口
+      blob = await reviewApi.batchExportByProgramType({
+        program_type: programType
+      })
+    } else {
+      ElMessage.warning('请至少选择用户或类别')
+      return
+    }
+
+    // 创建下载链接
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+
+    // 从响应头获取文件名，如果没有则使用默认文件名
+    // 注意：由于是 blob 响应，可能需要从 Content-Disposition 头获取文件名
+    // 这里先使用默认文件名，后续可以根据实际响应调整
+    const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    link.download = `${fileName}_${timestamp}.zip`
+
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    ElMessage.success('导出成功')
+  } catch (error: unknown) {
+    console.error('导出失败:', error)
+    let errorMessage = '导出失败，请稍后重试'
+
+    if (error && typeof error === 'object' && 'message' in error) {
+      errorMessage = (error as Error).message
+    }
+
+    ElMessage.error(errorMessage)
+  }
 }
 
 // 导出盖章报名表
@@ -292,9 +408,33 @@ const loadAllData = async () => {
   }
 }
 
+// 加载用户列表（只获取 role 为 'user' 的用户）
+// 注意：此接口需要管理员权限，审核账号无法访问
+const loadUserList = async () => {
+  // 只有管理员才能访问用户列表接口
+  if (!isAdmin.value) {
+    // 审核账号不加载用户列表，静默跳过
+    userListLoading.value = false
+    return
+  }
+
+  userListLoading.value = true
+  try {
+    const result = await accountApi.getAccounts({ page: 1, page_size: 1000 })
+    // 过滤出 role 为 'user' 的用户
+    userList.value = result.users.filter((user: any) => user.role === 'user')
+  } catch (error) {
+    console.error('加载用户列表失败:', error)
+    // 不显示错误提示，因为这只是可选功能
+  } finally {
+    userListLoading.value = false
+  }
+}
+
 // 组件挂载时加载数据
 onMounted(() => {
   loadAllData()
+  loadUserList()
 })
 
 // 导出统计表
@@ -438,8 +578,29 @@ function exportStatistics() {
         </div>
         <div class="export-actions">
           <el-select
+            v-if="isAdmin"
+            v-model="selectedUser"
+            placeholder="请选择用户 (全部)"
+            style="width: 220px"
+            clearable
+            filterable
+            :loading="userListLoading"
+          >
+            <el-option
+              v-for="user in userList"
+              :key="user.account"
+              :label="user.username || user.account"
+              :value="user.account"
+            >
+              <span>{{ user.username || user.account }}</span>
+              <span v-if="user.username && user.account !== user.username" style="color: #909399; margin-left: 8px;">
+                ({{ user.account }})
+              </span>
+            </el-option>
+          </el-select>
+          <el-select
             v-model="selectedCategory"
-            placeholder="请选择节目类型（全部）"
+            placeholder="请选择节目类型 (全部)"
             style="width: 220px"
             clearable
           >

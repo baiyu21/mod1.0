@@ -1,66 +1,50 @@
 <!-- eslint-disable vue/multi-word-component-names -->
-<!--
-  登录页面组件
-  功能：提供用户登录功能，包含账号密码输入、表单验证和登录提交
-  使用 Element Plus 组件库实现 UI，使用组合式 API 管理状态和逻辑
--->
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
-import { commonRules } from '@/composables/useForm'
+// import { useMediaQuery } from '@vueuse/core'
+// import { ElMessage } from 'element-plus'
 import { Service, Phone, Message } from '@element-plus/icons-vue'
 import loginBackground from '@/assets/styles/loginbackground.jpg'
-import TestLoginHelper from '@/components/TestLoginHelper.vue'
 
-/**
- * 使用封装的认证组合式函数
- * @returns {Object} 返回登录相关的状态和方法
- *   - loading: 登录加载状态
- *   - loginForm: 登录表单数据对象，包含 username 和 password
- *   - login: 登录方法，接收表单数据作为参数
- */
-const {
-  loading,
-  loginForm,
-  login
-} = useAuth()
+// const isLargeScreen = useMediaQuery('(min-width: 2560px)')
+const router = useRouter()
 
-/**
- * 表单验证规则
- * @type {Object}
- *   - username: 用户名验证规则，必填项
- *   - password: 密码验证规则，6位以上，至少包含三种字符类型（大小写字母、数字、特殊字符）
- */
-const rules = {
-  username: commonRules.username,
-  password: commonRules.password(6)
-}
-
-/**
- * 处理登录提交
- * @async
- * @function onSubmit
- * @description 当用户点击登录按钮时调用，验证表单后执行登录操作
- * @returns {Promise<void>}
- */
-const onSubmit = async () => {
-  await login(loginForm.value)
-}
-
-// 忘记密码对话框
+// 使用封装的认证组合式函数
+const { loading, loginForm, login, currentUser } = useAuth()
+const errorMessage = ref('')
 const forgotPwdDialogVisible = ref(false)
 const rememberMe = ref(false)
 
-// 处理忘记密码
+// 处理登录
+const handleLogin = async () => {
+  const success = await login(loginForm.value)
+  if (success) {
+    const role = currentUser.value.role
+
+    if (role === 'admin') {
+      router.push('/admin')
+    } else if (role === 'approval') {
+      router.push('/approval')
+    } else if (role === 'logaudit') {
+      router.push('/logaudit')
+    } else {
+      router.push('/user')
+    }
+  }
+}
+
+// 忘记密码
 const handleForgotPwd = () => {
   forgotPwdDialogVisible.value = true
 }
+
+console.log('LoginModle mounted')
 </script>
 
 <template>
   <div class="login-root">
-    <!-- 测试登录辅助组件（浮动在右上角） -->
-    <TestLoginHelper />
     <div class="box-root flex-flex flex-direction--column" style="min-height: 100vh; flex-grow: 1">
       <div class="loginbackground padding-top--64">
         <div class="loginbackground-gridContainer">
@@ -76,6 +60,7 @@ const handleForgotPwd = () => {
             ></div>
           </div>
           <div class="box-root flex-flex" style="grid-area: 4 / 2 / auto / 5">
+            <!-- <div class="box-root box-divider--light-all-2" style="flex-grow: 1"></div> -->
           </div>
           <div class="box-root flex-flex" style="grid-area: 6 / start / auto / 2">
             <div class="box-root box-background--blue800" style="flex-grow: 1"></div>
@@ -96,6 +81,7 @@ const handleForgotPwd = () => {
             <div class="box-root box-background--gray100" style="flex-grow: 1"></div>
           </div>
           <div class="box-root flex-flex" style="grid-area: 5 / 14 / auto / 17">
+            <!-- <div class="box-root box-divider--light-all-2" style="flex-grow: 1"></div> -->
           </div>
         </div>
       </div>
@@ -113,19 +99,32 @@ const handleForgotPwd = () => {
                 <h2 class="login-title">欢迎登录中艺展报名系统</h2>
               </div>
 
+              <el-alert
+                v-if="errorMessage"
+                :title="errorMessage"
+                type="error"
+                show-icon
+                :closable="false"
+                class="login-alert"
+              />
+
               <el-form
                 :model="loginForm"
-                :rules="rules"
-                @submit.prevent="onSubmit"
+                @submit.prevent="handleLogin"
                 label-position="top"
                 size="large"
                 class="login-form"
               >
-                <el-form-item label="账号" prop="username" class="form-item-spacing">
+                <el-form-item class="form-item-spacing">
+                  <template #label>
+                    <div class="password-label-row">
+                      <span>账号</span>
+                    </div>
+                  </template>
                   <el-input v-model="loginForm.username" placeholder="请输入账号" />
                 </el-form-item>
 
-                <el-form-item prop="password" class="form-item-spacing">
+                <el-form-item class="form-item-spacing">
                   <template #label>
                     <div class="password-label-row">
                       <span>密码</span>
@@ -155,7 +154,7 @@ const handleForgotPwd = () => {
                     type="primary"
                     :loading="loading"
                     class="submit-btn"
-                    @click="onSubmit"
+                    @click="handleLogin"
                   >
                     {{ loading ? '登录中...' : '登录' }}
                   </el-button>
@@ -171,7 +170,6 @@ const handleForgotPwd = () => {
     </div>
   </div>
 
-  <!-- 忘记密码对话框 -->
   <el-dialog
     v-model="forgotPwdDialogVisible"
     title="联系管理员"
@@ -222,21 +220,17 @@ const handleForgotPwd = () => {
     sans-serif;
   font-weight: 500;
 }
-
 body {
   min-height: 100%;
   background-color: #ffffff;
 }
-
 h1 {
   letter-spacing: -1px;
 }
-
 a {
   color: #5469d4;
   text-decoration: unset;
 }
-
 .login-root {
   background: #fff v-bind('`url(${loginBackground})`') no-repeat center center fixed;
   background-size: cover;
@@ -245,7 +239,6 @@ a {
   min-height: 100vh;
   overflow: hidden;
   position: relative;
-
   .loginbackground {
     min-height: 692px;
     position: fixed;
@@ -256,7 +249,6 @@ a {
     z-index: 0;
     overflow: hidden;
   }
-
   .loginbackground-gridContainer {
     display: grid;
     grid-template-columns: [start] 1fr [left-gutter] repeat(16, 86.6px) [left-gutter] 1fr [end];
@@ -284,33 +276,26 @@ a {
 .flex-flex {
   display: flex;
 }
-
 .align-center {
   align-items: center;
 }
-
 .center-center {
   align-items: center;
   justify-content: center;
 }
-
 .box-root {
   box-sizing: border-box;
 }
-
 .flex-direction--column {
   -ms-flex-direction: column;
   flex-direction: column;
 }
-
 .box-divider--light-all-2 {
   box-shadow: inset 0 0 0 2px #e3e8ee;
 }
-
 .box-background--white {
   background-color: #ffffff;
 }
-
 /* Image Background Styles applied to grid items */
 .box-background--blue800 {
   background-image: v-bind('`url(${loginBackground})`') !important;
@@ -318,56 +303,47 @@ a {
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  filter: contrast(1.4) brightness(0.8) saturate(1.2);
+  filter: contrast(1.4) brightness(0.8) saturate(1.2); /* Deep, rich red */
 }
-
 .box-background--blue {
   background-image: v-bind('`url(${loginBackground})`') !important;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  filter: contrast(1.1) brightness(1.1) saturate(1.1);
+  filter: contrast(1.1) brightness(1.1) saturate(1.1); /* Vibrant red */
 }
-
 .box-background--cyan200 {
   background-image: v-bind('`url(${loginBackground})`') !important;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  filter: contrast(1) brightness(1.3) sepia(0.3) saturate(0.8);
+  filter: contrast(1) brightness(1.3) sepia(0.3) saturate(0.8); /* Lighter, pinkish */
 }
-
 .box-background--gray100 {
   background-image: v-bind('`url(${loginBackground})`') !important;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  filter: grayscale(0.4) contrast(1.1) brightness(1.2);
+  filter: grayscale(0.4) contrast(1.1) brightness(1.2); /* Muted, texture */
 }
-
 .padding-top--64 {
   padding-top: 64px;
 }
-
 .padding-top--24 {
   padding-top: 24px;
 }
-
 .padding-top--48 {
   padding-top: 48px;
 }
-
 .padding-bottom--24 {
   padding-bottom: 24px;
 }
-
 .padding-horizontal--48 {
   padding: 48px;
 }
-
 .padding-bottom--15 {
   padding-bottom: 15px;
 }
@@ -383,20 +359,18 @@ a {
   width: 90%;
   max-width: 448px;
   background: #ffffff;
-  border-radius: 24px;
+  border-radius: 24px; /* More rounded */
   box-shadow:
     0 8px 32px 0 rgba(0, 0, 0, 0.2),
     0 1px 2px 0 rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.3);
   transition: all 0.3s ease;
 }
-
 @media (min-width: 1920px) {
   .formbg {
     max-width: 500px;
   }
 }
-
 @media (min-width: 2560px) {
   .formbg {
     max-width: 600px;
@@ -406,36 +380,30 @@ a {
     font-size: 24px;
   }
 }
-
 @media (max-width: 480px) {
   .formbg-inner {
     padding: 24px;
   }
 }
-
 span {
   display: block;
   font-size: 20px;
   line-height: 28px;
   color: #1a1f36;
 }
-
 label {
   margin-bottom: 10px;
 }
-
 .reset-pass a,
 label {
   font-size: 14px;
   font-weight: 600;
   display: block;
 }
-
 .reset-pass > a {
   text-align: right;
   margin-bottom: 10px;
 }
-
 .grid--50-50 {
   display: grid;
   grid-template-columns: 50% 50%;
@@ -447,21 +415,17 @@ a.ssolink {
   text-align: center;
   font-weight: 600;
 }
-
 .footer-link {
   margin-top: 24px;
   text-align: center;
 }
-
 .footer-link span {
   font-size: 14px;
   color: #697386;
 }
-
 .contact-link {
   vertical-align: baseline;
 }
-
 .listing a {
   color: #697386;
   font-weight: 600;
@@ -471,15 +435,12 @@ a.ssolink {
 .animationRightLeft {
   animation: animationRightLeft 2s ease-in-out infinite;
 }
-
 .animationLeftRight {
   animation: animationLeftRight 2s ease-in-out infinite;
 }
-
 .tans3s {
   animation: animationLeftRight 3s ease-in-out infinite;
 }
-
 .tans4s {
   animation: animationLeftRight 4s ease-in-out infinite;
 }
@@ -529,7 +490,6 @@ a.ssolink {
   padding: 1px 15px;
 }
 
-
 .form-item-spacing {
   margin-bottom: 24px;
 }
@@ -538,7 +498,6 @@ a.ssolink {
   margin-bottom: 30px;
   text-align: center;
 }
-
 .login-title {
   font-size: 22px;
   color: #1a1f36;
@@ -546,29 +505,28 @@ a.ssolink {
   line-height: 1.4;
   letter-spacing: -0.5px;
 }
-
+.login-alert {
+  margin-bottom: 20px;
+  border-radius: 12px;
+}
 .password-label-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
 }
-
 .password-label-row span {
   font-size: 16px;
   font-weight: 600;
   color: #1a1f36;
 }
-
 .forgot-pwd-link {
   font-size: 15px;
   color: #d32f2f;
 }
-
 .checkbox-item {
   margin-bottom: 20px;
 }
-
 .submit-btn {
   width: 100%;
   font-weight: 600;
@@ -578,7 +536,6 @@ a.ssolink {
   background-color: #d32f2f;
   border-color: #d32f2f;
 }
-
 .submit-btn:hover,
 .submit-btn:focus {
   background-color: #b71c1c;
@@ -607,62 +564,51 @@ a.ssolink {
   display: inline-block;
 }
 
-
 /* Dialog Styles */
 :deep(.custom-dialog) {
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
-
 :deep(.custom-dialog .el-dialog__header) {
   margin: 0;
   padding: 24px 24px 0;
   text-align: center;
 }
-
 :deep(.custom-dialog .el-dialog__title) {
   font-size: 18px;
   font-weight: 600;
   color: #1a1f36;
 }
-
 :deep(.custom-dialog .el-dialog__body) {
   padding: 24px;
 }
-
 :deep(.custom-dialog .el-dialog__footer) {
   padding: 0 24px 24px;
   text-align: center;
 }
-
 .contact-info {
   text-align: center;
 }
-
 .info-icon {
   margin-bottom: 16px;
   display: flex;
   justify-content: center;
 }
-
 .info-icon .el-icon {
   color: #d32f2f;
 }
-
 .info-desc {
   margin-bottom: 24px;
   font-size: 14px;
   color: #697386;
   line-height: 1.5;
 }
-
 .info-detail {
   background-color: #f7fafc;
   border-radius: 8px;
   padding: 16px;
 }
-
 .detail-item {
   display: flex;
   align-items: center;
@@ -672,17 +618,14 @@ a.ssolink {
   font-size: 15px;
   font-weight: 500;
 }
-
 .detail-item:last-child {
   margin-bottom: 0;
 }
-
 .detail-item .el-icon {
   margin-right: 8px;
   color: #d32f2f;
   font-size: 18px;
 }
-
 .dialog-btn {
   width: 100%;
   height: 40px;
@@ -693,10 +636,7 @@ a.ssolink {
   border: none;
   border-radius: 4px;
 }
-
 .dialog-btn:hover {
   background-color: #b71c1c;
 }
 </style>
-
-

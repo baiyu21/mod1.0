@@ -536,6 +536,23 @@ const getCategoryName = (key: string) => {
   return names[key] || key
 }
 
+// 将前端类别值映射到后端 program_type 值
+function mapCategoryToProgramType(category: string): string | null {
+  const categoryMap: Record<string, string> = {
+    'vocal': 'vocal',
+    'instrumental': 'instrumental',
+    'dance': 'dance',
+    'opera': 'opera',
+    'calligraphy': 'calligraphy',
+    'painting': 'painting',
+    'design': 'design',
+    'photography': 'photography',
+    'microfilm': 'micro_film', // 注意：后端使用 micro_film
+    'artPractice': 'workshop' // 艺术实践工作坊映射到 workshop
+  }
+  return categoryMap[category] || null
+}
+
 // 映射后端状态到前端状态
 const mapBackendStatus = (status: string | undefined | null): string => {
   const value = typeof status === 'string' ? status.toLowerCase() : ''
@@ -777,14 +794,49 @@ const exportByCategory = async () => {
     ElMessage.warning('请选择要导出的类别')
     return
   }
+
+  // 映射前端类别值到后端 program_type
+  const programType = mapCategoryToProgramType(selectedCategory.value)
+
+  if (!programType) {
+    ElMessage.warning('该类别暂不支持导出，请选择其他类别')
+    return
+  }
+
   exporting.value = true
   try {
-    // TODO: 实现按类别导出逻辑
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    ElMessage.success(`导出${getCategoryName(selectedCategory.value)}成功`)
+    ElMessage.info(`正在导出${getCategoryName(selectedCategory.value)}的报名材料...`)
+
+    // 调用按节目类型导出接口
+    const blob = await reviewApi.batchExportByProgramType({
+      program_type: programType
+    })
+
+    // 创建下载链接
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+
+    // 生成文件名
+    const categoryLabel = getCategoryName(selectedCategory.value)
+    const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    link.download = `报名材料_${categoryLabel}_${timestamp}.zip`
+
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    ElMessage.success(`导出${categoryLabel}成功`)
   } catch (error) {
     console.error('导出失败:', error)
-    ElMessage.error('导出失败，请重试')
+    let errorMessage = '导出失败，请重试'
+
+    if (error && typeof error === 'object' && 'message' in error) {
+      errorMessage = (error as Error).message
+    }
+
+    ElMessage.error(errorMessage)
   } finally {
     exporting.value = false
   }

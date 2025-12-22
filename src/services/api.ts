@@ -1713,6 +1713,87 @@ export const reviewApi = {
       }
       throw error
     }
+  },
+
+  /**
+   * 导出报名材料
+   * @param params 导出参数
+   * @param params.export_type 导出类型：'user' | 'category'
+   * @param params.user_id 用户ID（当 export_type='user' 时必填）
+   * @param params.category 类别（当 export_type='category' 时必填，未来使用）
+   * @returns Promise<Blob> 文件 Blob 对象
+   */
+  exportMaterials: async (params: {
+    export_type: 'user' | 'category'
+    user_id?: number
+    category?: string
+  }): Promise<Blob> => {
+    try {
+      const queryParams = new URLSearchParams()
+      queryParams.append('export_type', params.export_type)
+
+      if (params.export_type === 'user' && params.user_id) {
+        queryParams.append('user_id', params.user_id.toString())
+      } else if (params.export_type === 'category' && params.category) {
+        queryParams.append('category', params.category)
+      }
+
+      const url = `${API_BASE}/review/export-materials/?${queryParams.toString()}`
+
+      // 使用 axios 直接请求，设置 responseType 为 'blob' 以处理文件下载
+      const response = await request.get(url, {
+        responseType: 'blob'
+      })
+
+      // 返回 Blob 对象
+      return response.data as Blob
+    } catch (error: unknown) {
+      console.error('Export materials error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+      }
+      throw error
+    }
+  },
+
+  /**
+   * 批量导出报名材料（按节目类型）
+   * @param params 导出参数
+   * @param params.program_type 节目类型：'dance' | 'calligraphy' | 'painting' | 'photography' | 'instrumental' | 'vocal' | 'opera' | 'micro_film' | 'design' | 'workshop'
+   * @returns Promise<Blob> 文件 Blob 对象
+   */
+  batchExportByProgramType: async (params: {
+    program_type: string
+  }): Promise<Blob> => {
+    try {
+      const queryParams = new URLSearchParams()
+      queryParams.append('export_type', 'program')
+      queryParams.append('program_type', params.program_type)
+
+      const url = `${API_BASE}/review/batch-export/?${queryParams.toString()}`
+
+      // 使用 axios 直接请求，设置 responseType 为 'blob' 以处理文件下载
+      const response = await request.get(url, {
+        responseType: 'blob'
+      })
+
+      // 返回 Blob 对象
+      return response.data as Blob
+    } catch (error: unknown) {
+      console.error('Batch export by program type error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+      }
+      throw error
+    }
   }
 }
 
@@ -1731,6 +1812,39 @@ export const auditApi = {
     } catch (error) {
       console.error('Get audit records error:', error)
       return []
+    }
+  }
+}
+
+/**
+ * 报名须知相关接口
+ */
+export const registrationGuideApi = {
+  /**
+   * 下载报名须知文件
+   * @returns Promise<Blob> 文件 Blob 对象
+   */
+  downloadNotice: async (): Promise<Blob> => {
+    try {
+      const url = `${API_BASE}/registration-guides/notice/`
+
+      // 使用 axios 直接请求，设置 responseType 为 'blob' 以处理文件下载
+      const response = await request.get(url, {
+        responseType: 'blob'
+      })
+
+      // 返回 Blob 对象
+      return response.data as Blob
+    } catch (error: unknown) {
+      console.error('Download registration notice error:', error)
+      if (error && typeof error === 'object' && 'response' in error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any
+        const response = axiosError.response
+        console.error('错误状态码:', response?.status)
+        console.error('错误响应数据:', response?.data)
+      }
+      throw error
     }
   }
 }
@@ -1828,10 +1942,31 @@ export const accountApi = {
    * @returns 是否创建成功
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  createAccount: async (data: any): Promise<boolean> => {
+  createAccount: async (data: {
+    account: string
+    username: string
+    role: string
+    password: string
+    confirm_password: string
+  }): Promise<boolean> => {
     try {
-      const response = await post<{ success: boolean }>(`${API_BASE}/accounts/`, data)
-      return response.data?.success || false
+      // 接口路径：/api/admin/users/create/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>(`${API_BASE}/admin/users/create/`, {
+        account: data.account,
+        username: data.username,
+        role: data.role,
+        password: data.password,
+        confirm_password: data.confirm_password
+      })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+
+      // 处理后端返回格式：{ success: true, message: "..." } 或 { code: 200, ... }
+      if (result && (result.success === true || result.code === 200)) {
+        return true
+      }
+      return false
     } catch (error) {
       console.error('Create account error:', error)
       return false
@@ -1944,6 +2079,36 @@ export const accountApi = {
       return false
     } catch (error) {
       console.error('Unlock accounts error:', error)
+      return false
+    }
+  },
+
+  /**
+   * 批量修改账号密码
+   * @param accounts 账号数组
+   * @param newPassword 新密码
+   * @param confirmPassword 确认密码
+   * @returns 是否操作成功
+   */
+  batchResetPassword: async (accounts: string[], newPassword: string, confirmPassword: string): Promise<boolean> => {
+    try {
+      // 接口路径：/api/admin/users/password/reset-with-confirm/
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await post<any>(`${API_BASE}/admin/users/password/reset-with-confirm/`, {
+        accounts: accounts,
+        new_password: newPassword,
+        confirm_password: confirmPassword
+      })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = response as any
+
+      // 处理后端返回格式：{ success: true, message: "..." } 或 { code: 200, ... }
+      if (result && (result.success === true || result.code === 200)) {
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('Batch reset password error:', error)
       return false
     }
   }

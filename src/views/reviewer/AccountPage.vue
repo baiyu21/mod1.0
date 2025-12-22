@@ -178,6 +178,7 @@ function handleSelectionChange(rows: Account[]) {
 const createAccountDialogVisible = ref(false)
 const createAccountFormRef = ref<FormInstance>()
 const createAccountForm = reactive({
+  account: '',
   username: '',
   universityName: '',
   role: 'user' as Account['role'],
@@ -188,6 +189,11 @@ const createAccountForm = reactive({
 })
 
 const createAccountRules = reactive<FormRules>({
+  account: [
+    { required: true, message: '请输入账号', trigger: 'blur' },
+    { min: 3, max: 50, message: '账号长度为3-50个字符', trigger: 'blur' },
+    { pattern: /^[a-zA-Z0-9_]+$/, message: '账号只能包含字母、数字和下划线', trigger: 'blur' }
+  ],
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
     { min: 3, max: 20, message: '用户名长度为3-20个字符', trigger: 'blur' }
@@ -253,6 +259,7 @@ function openCreateAccountDialog() {
 }
 
 function resetCreateAccountForm() {
+  createAccountForm.account = ''
   createAccountForm.username = ''
   createAccountForm.universityName = ''
   createAccountForm.role = 'user'
@@ -263,32 +270,43 @@ function resetCreateAccountForm() {
   createAccountFormRef.value?.clearValidate()
 }
 
-function submitCreateAccount() {
+async function submitCreateAccount() {
   if (!createAccountFormRef.value) return
 
-  createAccountFormRef.value.validate((valid) => {
+  await createAccountFormRef.value.validate(async (valid) => {
     if (valid) {
-      // 检查用户名是否已存在
-      if (accountList.value.some(acc => acc.username === createAccountForm.username)) {
-        ElMessage.warning('用户名已存在')
-        return
-      }
+      try {
+        // 将前端角色映射到后端角色
+        const roleMap: Record<string, string> = {
+          'user': 'user',
+          'approval': 'reviewer',
+          'admin': 'admin',
+          'logaudit': 'logger'
+        }
+        const backendRole = roleMap[createAccountForm.role] || createAccountForm.role
 
-      const newAccount: Account = {
-        id: String(accountList.value.length + 1),
-        username: createAccountForm.username,
-        universityName: createAccountForm.universityName,
-        role: createAccountForm.role,
-        status: 'active',
-        email: createAccountForm.email || undefined,
-        phone: createAccountForm.phone || undefined,
-        createTime: new Date().toISOString().split('T')[0]
-      }
+        // 调用创建账号接口
+        const success = await accountApi.createAccount({
+          account: createAccountForm.account,
+          username: createAccountForm.universityName || createAccountForm.username, // 使用大学名称作为 username
+          role: backendRole,
+          password: createAccountForm.password,
+          confirm_password: createAccountForm.confirmPassword
+        })
 
-      accountList.value.push(newAccount)
-      ElMessage.success('账号创建成功')
-      createAccountDialogVisible.value = false
-      resetCreateAccountForm()
+        if (success) {
+          ElMessage.success('账号创建成功')
+          createAccountDialogVisible.value = false
+          resetCreateAccountForm()
+          // 刷新账号列表
+          await loadAccounts()
+        } else {
+          ElMessage.error('账号创建失败，请检查输入信息')
+        }
+      } catch (error) {
+        console.error('创建账号失败:', error)
+        ElMessage.error('账号创建失败，请稍后重试')
+      }
     }
   })
 }
@@ -393,16 +411,38 @@ function openChangePasswordDialog(row: Account) {
   changePasswordFormRef.value?.clearValidate()
 }
 
-function submitChangePassword() {
+async function submitChangePassword() {
   if (!changePasswordFormRef.value) return
 
-  changePasswordFormRef.value.validate((valid) => {
+  await changePasswordFormRef.value.validate(async (valid) => {
     if (valid && currentChangeAccount.value) {
-      ElMessage.success(`已修改账号 ${currentChangeAccount.value.username} 的密码`)
-      changePasswordDialogVisible.value = false
-      changePasswordForm.newPassword = ''
-      changePasswordForm.confirmPassword = ''
-      currentChangeAccount.value = null
+      if (!currentChangeAccount.value.account) {
+        ElMessage.error('账号信息不完整，无法修改密码')
+        return
+      }
+
+      try {
+        const success = await accountApi.batchResetPassword(
+          [currentChangeAccount.value.account],
+          changePasswordForm.newPassword,
+          changePasswordForm.confirmPassword
+        )
+
+        if (success) {
+          ElMessage.success(`已修改账号 ${currentChangeAccount.value.username} 的密码`)
+          changePasswordDialogVisible.value = false
+          changePasswordForm.newPassword = ''
+          changePasswordForm.confirmPassword = ''
+          currentChangeAccount.value = null
+          // 刷新列表
+          await loadAccounts()
+        } else {
+          ElMessage.error('修改密码失败')
+        }
+      } catch (error) {
+        console.error('修改密码失败:', error)
+        ElMessage.error('修改密码失败')
+      }
     }
   })
 }
@@ -501,7 +541,7 @@ async function disableAccount(row: Account) {
     try {
       const success = await accountApi.disableAccounts([row.account!])
       if (success) {
-        ElMessage.success('账号已停用')
+    ElMessage.success('账号已停用')
         // 刷新列表
         await loadAccounts()
       } else {
@@ -544,7 +584,7 @@ async function batchDisableAccount() {
       const success = await accountApi.disableAccounts(accounts)
       if (success) {
         ElMessage.success(`已批量停用 ${accounts.length} 个账号`)
-        multipleSelection.value = []
+    multipleSelection.value = []
         // 刷新列表
         await loadAccounts()
       } else {
@@ -576,7 +616,7 @@ async function unlockAccount(row: Account) {
     try {
       const success = await accountApi.unlockAccounts([row.account!])
       if (success) {
-        ElMessage.success('账号已解锁')
+    ElMessage.success('账号已解锁')
         // 刷新列表
         await loadAccounts()
       } else {
@@ -619,7 +659,7 @@ async function batchUnlockAccount() {
       const success = await accountApi.unlockAccounts(accounts)
       if (success) {
         ElMessage.success(`已批量解锁 ${accounts.length} 个账号`)
-        multipleSelection.value = []
+    multipleSelection.value = []
         // 刷新列表
         await loadAccounts()
       } else {
@@ -630,6 +670,101 @@ async function batchUnlockAccount() {
       ElMessage.error('批量解锁账号失败')
     }
   }).catch(() => {})
+}
+
+// 批量修改密码
+const batchResetPasswordDialogVisible = ref(false)
+const batchResetPasswordForm = reactive({
+  newPassword: '',
+  confirmPassword: ''
+})
+const batchResetPasswordFormRef = ref<FormInstance>()
+
+// 批量修改密码表单验证规则
+const batchResetPasswordRules = reactive<FormRules>({
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 6, message: '密码长度不能少于6位', trigger: 'blur' }
+  ],
+  confirmPassword: [
+    { required: true, message: '请确认新密码', trigger: 'blur' },
+    {
+      validator: (rule, value, callback) => {
+        if (value !== batchResetPasswordForm.newPassword) {
+          callback(new Error('两次输入的密码不一致'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'blur'
+    }
+  ]
+})
+
+// 打开批量修改密码对话框
+function openBatchResetPasswordDialog() {
+  if (multipleSelection.value.length === 0) {
+    ElMessage.warning('请先选择要修改密码的账号')
+    return
+  }
+
+  batchResetPasswordForm.newPassword = ''
+  batchResetPasswordForm.confirmPassword = ''
+  batchResetPasswordDialogVisible.value = true
+}
+
+// 提交批量修改密码
+async function submitBatchResetPassword() {
+  if (!batchResetPasswordFormRef.value) return
+
+  // 验证表单
+  await batchResetPasswordFormRef.value.validate((valid) => {
+    if (!valid) {
+      return
+    }
+
+    const accounts = multipleSelection.value
+      .map(acc => acc.account)
+      .filter((account): account is string => !!account)
+
+    if (accounts.length === 0) {
+      ElMessage.warning('所选账号中没有有效的账号信息')
+      return
+    }
+
+    const accountNames = accounts.join('、')
+    ElMessageBox.confirm(
+      `确定要将以下 ${accounts.length} 个账号的密码修改为 "${batchResetPasswordForm.newPassword}" 吗？\n${accountNames}`,
+      '批量修改密码',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    ).then(async () => {
+      try {
+        const success = await accountApi.batchResetPassword(
+          accounts,
+          batchResetPasswordForm.newPassword,
+          batchResetPasswordForm.confirmPassword
+        )
+        if (success) {
+          ElMessage.success(`已批量修改 ${accounts.length} 个账号的密码`)
+          multipleSelection.value = []
+          batchResetPasswordDialogVisible.value = false
+          batchResetPasswordForm.newPassword = ''
+          batchResetPasswordForm.confirmPassword = ''
+          // 刷新列表
+          await loadAccounts()
+        } else {
+          ElMessage.error('批量修改密码失败')
+        }
+      } catch (error) {
+        console.error('批量修改密码失败:', error)
+        ElMessage.error('批量修改密码失败')
+      }
+    }).catch(() => {})
+  })
 }
 </script>
 
@@ -657,6 +792,9 @@ async function batchUnlockAccount() {
             </el-button>
             <el-button type="info" @click="batchUnlockAccount">
               批量解锁
+            </el-button>
+            <el-button type="primary" @click="openBatchResetPasswordDialog">
+              批量修改密码
             </el-button>
 
           </div>
@@ -792,6 +930,13 @@ async function batchUnlockAccount() {
         :rules="createAccountRules"
         label-width="100px"
       >
+        <el-form-item label="账号" prop="account">
+          <el-input
+            v-model="createAccountForm.account"
+            placeholder="请输入账号（3-50个字符，只能包含字母、数字和下划线）"
+            clearable
+          />
+        </el-form-item>
         <el-form-item label="用户名" prop="username">
           <el-input
             v-model="createAccountForm.username"
@@ -817,21 +962,6 @@ async function batchUnlockAccount() {
             <el-option label="管理员" value="admin" />
             <el-option label="日志审计员" value="logaudit" />
           </el-select>
-        </el-form-item>
-        <el-form-item label="邮箱" prop="email">
-          <el-input
-            v-model="createAccountForm.email"
-            type="email"
-            placeholder="请输入邮箱（可选）"
-            clearable
-          />
-        </el-form-item>
-        <el-form-item label="手机号" prop="phone">
-          <el-input
-            v-model="createAccountForm.phone"
-            placeholder="请输入手机号（可选）"
-            clearable
-          />
         </el-form-item>
         <el-form-item label="密码" prop="password">
           <el-input
@@ -968,6 +1098,53 @@ async function batchUnlockAccount() {
       <template #footer>
         <el-button @click="changePasswordDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="submitChangePassword">确定修改</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 批量修改密码对话框 -->
+    <el-dialog
+      v-model="batchResetPasswordDialogVisible"
+      title="批量修改密码"
+      width="500px"
+      @close="() => {
+        batchResetPasswordForm.newPassword = ''
+        batchResetPasswordForm.confirmPassword = ''
+        batchResetPasswordFormRef?.clearValidate()
+      }"
+    >
+      <el-form
+        ref="batchResetPasswordFormRef"
+        :model="batchResetPasswordForm"
+        :rules="batchResetPasswordRules"
+        label-width="100px"
+      >
+        <el-form-item label="新密码" prop="newPassword">
+          <el-input
+            v-model="batchResetPasswordForm.newPassword"
+            type="password"
+            placeholder="请输入新密码（至少6位）"
+            show-password
+          />
+        </el-form-item>
+        <el-form-item label="确认密码" prop="confirmPassword">
+          <el-input
+            v-model="batchResetPasswordForm.confirmPassword"
+            type="password"
+            placeholder="请再次输入新密码"
+            show-password
+          />
+        </el-form-item>
+        <el-alert
+          v-if="multipleSelection.length > 0"
+          :title="`已选择 ${multipleSelection.length} 个账号`"
+          type="info"
+          :closable="false"
+          style="margin-bottom: 20px"
+        />
+      </el-form>
+      <template #footer>
+        <el-button @click="batchResetPasswordDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitBatchResetPassword">确定</el-button>
       </template>
     </el-dialog>
   </div>
