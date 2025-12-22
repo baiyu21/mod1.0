@@ -47,7 +47,7 @@ export interface ReviewParams {
  * API 基础路径配置
  */
 const API_BASE = '/api'
-const FILE_BASE_URL = (import.meta.env.VITE_FILE_BASE_URL as string | undefined) || 'http://c369ec45.natappfree.cc'
+const FILE_BASE_URL = (import.meta.env.VITE_FILE_BASE_URL as string | undefined) || 'http://a8c69486.natappfree.cc'
 
 /**
  * 将后端返回的角色映射为前端角色类型

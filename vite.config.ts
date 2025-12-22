@@ -21,32 +21,33 @@ export default defineConfig({
     proxy: {
       // 代理所有以 /api 开头的请求
       '/api': {
-        target: 'http://c369ec45.natappfree.cc',
+        target: 'http://a8c69486.natappfree.cc',
         changeOrigin: true, // 改变请求头中的 origin
         secure: false, // 如果是 https 接口，需要配置这个参数
         // 后端路径包含 /api，不需要重写路径
+        rewrite: (path) => path, // 保持路径不变
       },
       // 代理设计接口路径 /design/api/
       '/design': {
-        target: 'http://c369ec45.natappfree.cc',
+        target: 'http://a8c69486.natappfree.cc',
         changeOrigin: true,
         secure: false
       },
       // 代理绘画接口路径 /painting/api/
       '/painting': {
-        target: 'http://c369ec45.natappfree.cc',
+        target: 'http://a8c69486.natappfree.cc',
         changeOrigin: true,
         secure: false
       },
       // 代理摄影接口路径 /photography/api/
       '/photography': {
-        target: 'http://c369ec45.natappfree.cc',
+        target: 'http://a8c69486.natappfree.cc',
         changeOrigin: true,
         secure: false
       },
       // 代理微电影接口路径 /micro-film/api/
       '/micro-film': {
-        target: 'http://c369ec45.natappfree.cc',
+        target: 'http://a8c69486.natappfree.cc',
         changeOrigin: true,
         secure: false
       }

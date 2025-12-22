@@ -100,7 +100,7 @@ function createAxiosInstance(baseURL: string): AxiosInstance {
 // 生产环境：使用环境变量或默认完整 URL
 const baseURL = import.meta.env.DEV
   ? '' // 开发环境使用相对路径，通过 Vite 代理
-  : (import.meta.env.VITE_API_BASE_URL || 'http://c369ec45.natappfree.cc') // 生产环境使用完整 URL
+  : (import.meta.env.VITE_API_BASE_URL || 'http://a8c69486.natappfree.cc') // 生产环境使用完整 URL
 export const request = createAxiosInstance(baseURL)
 
 /**
