@@ -1,50 +1,66 @@
 <!-- eslint-disable vue/multi-word-component-names -->
+<!--
+  登录页面组件
+  功能：提供用户登录功能，包含账号密码输入、表单验证和登录提交
+  使用 Element Plus 组件库实现 UI，使用组合式 API 管理状态和逻辑
+-->
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
-// import { useMediaQuery } from '@vueuse/core'
-// import { ElMessage } from 'element-plus'
+import { commonRules } from '@/composables/useForm'
 import { Service, Phone, Message } from '@element-plus/icons-vue'
 import loginBackground from '@/assets/styles/loginbackground.jpg'
+import TestLoginHelper from '@/components/TestLoginHelper.vue'
 
-// const isLargeScreen = useMediaQuery('(min-width: 2560px)')
-const router = useRouter()
+/**
+ * 使用封装的认证组合式函数
+ * @returns {Object} 返回登录相关的状态和方法
+ *   - loading: 登录加载状态
+ *   - loginForm: 登录表单数据对象，包含 username 和 password
+ *   - login: 登录方法，接收表单数据作为参数
+ */
+const {
+  loading,
+  loginForm,
+  login
+} = useAuth()
 
-// 使用封装的认证组合式函数
-const { loading, loginForm, login, currentUser } = useAuth()
-const errorMessage = ref('')
+/**
+ * 表单验证规则
+ * @type {Object}
+ *   - username: 用户名验证规则，必填项
+ *   - password: 密码验证规则，6位以上，至少包含三种字符类型（大小写字母、数字、特殊字符）
+ */
+const rules = {
+  username: commonRules.username,
+  password: commonRules.password(6)
+}
+
+/**
+ * 处理登录提交
+ * @async
+ * @function onSubmit
+ * @description 当用户点击登录按钮时调用，验证表单后执行登录操作
+ * @returns {Promise<void>}
+ */
+const onSubmit = async () => {
+  await login(loginForm.value)
+}
+
+// 忘记密码对话框
 const forgotPwdDialogVisible = ref(false)
 const rememberMe = ref(false)
 
-// 处理登录
-const handleLogin = async () => {
-  const success = await login(loginForm.value)
-  if (success) {
-    const role = currentUser.value.role
-
-    if (role === 'admin') {
-      router.push('/admin')
-    } else if (role === 'approval') {
-      router.push('/approval')
-    } else if (role === 'logaudit') {
-      router.push('/logaudit')
-    } else {
-      router.push('/user')
-    }
-  }
-}
-
-// 忘记密码
+// 处理忘记密码
 const handleForgotPwd = () => {
   forgotPwdDialogVisible.value = true
 }
-
-console.log('LoginModle mounted')
 </script>
 
 <template>
   <div class="login-root">
+    <!-- 测试登录辅助组件（浮动在右上角） -->
+    <TestLoginHelper />
     <div class="box-root flex-flex flex-direction--column" style="min-height: 100vh; flex-grow: 1">
       <div class="loginbackground padding-top--64">
         <div class="loginbackground-gridContainer">
@@ -60,7 +76,6 @@ console.log('LoginModle mounted')
             ></div>
           </div>
           <div class="box-root flex-flex" style="grid-area: 4 / 2 / auto / 5">
-            <!-- <div class="box-root box-divider--light-all-2" style="flex-grow: 1"></div> -->
           </div>
           <div class="box-root flex-flex" style="grid-area: 6 / start / auto / 2">
             <div class="box-root box-background--blue800" style="flex-grow: 1"></div>
@@ -81,13 +96,12 @@ console.log('LoginModle mounted')
             <div class="box-root box-background--gray100" style="flex-grow: 1"></div>
           </div>
           <div class="box-root flex-flex" style="grid-area: 5 / 14 / auto / 17">
-            <!-- <div class="box-root box-divider--light-all-2" style="flex-grow: 1"></div> -->
           </div>
         </div>
       </div>
       <div
-        class="box-root padding-top--24 flex-flex flex-direction--column"
-        style="flex-grow: 1; z-index: 9; justify-content: center"
+        class="box-root padding-top--24 flex-flex flex-direction--column form-container"
+        style="flex-grow: 1; z-index: 9; justify-content: center; align-items: center"
       >
         <div class="formbg-outer">
           <div class="formbg">
@@ -99,32 +113,19 @@ console.log('LoginModle mounted')
                 <h2 class="login-title">欢迎登录中艺展报名系统</h2>
               </div>
 
-              <el-alert
-                v-if="errorMessage"
-                :title="errorMessage"
-                type="error"
-                show-icon
-                :closable="false"
-                class="login-alert"
-              />
-
               <el-form
                 :model="loginForm"
-                @submit.prevent="handleLogin"
+                :rules="rules"
+                @submit.prevent="onSubmit"
                 label-position="top"
                 size="large"
                 class="login-form"
               >
-                <el-form-item class="form-item-spacing">
-                  <template #label>
-                    <div class="password-label-row">
-                      <span>账号</span>
-                    </div>
-                  </template>
+                <el-form-item label="账号" prop="username" class="form-item-spacing">
                   <el-input v-model="loginForm.username" placeholder="请输入账号" />
                 </el-form-item>
 
-                <el-form-item class="form-item-spacing">
+                <el-form-item prop="password" class="form-item-spacing">
                   <template #label>
                     <div class="password-label-row">
                       <span>密码</span>
@@ -154,7 +155,7 @@ console.log('LoginModle mounted')
                     type="primary"
                     :loading="loading"
                     class="submit-btn"
-                    @click="handleLogin"
+                    @click="onSubmit"
                   >
                     {{ loading ? '登录中...' : '登录' }}
                   </el-button>
@@ -170,6 +171,7 @@ console.log('LoginModle mounted')
     </div>
   </div>
 
+  <!-- 忘记密码对话框 -->
   <el-dialog
     v-model="forgotPwdDialogVisible"
     title="联系管理员"
@@ -220,27 +222,32 @@ console.log('LoginModle mounted')
     sans-serif;
   font-weight: 500;
 }
+
 body {
   min-height: 100%;
   background-color: #ffffff;
 }
+
 h1 {
   letter-spacing: -1px;
 }
+
 a {
   color: #5469d4;
   text-decoration: unset;
 }
+
 .login-root {
-  background: #fff v-bind('`url(${loginBackground})`') no-repeat center center fixed;
+  background: v-bind('`url(${loginBackground})`') no-repeat center center fixed;
   background-size: cover;
   display: flex;
   width: 100%;
   min-height: 100vh;
   overflow: hidden;
   position: relative;
+
   .loginbackground {
-    min-height: 692px;
+    min-height: 100vh;
     position: fixed;
     bottom: 0;
     left: 0;
@@ -249,6 +256,7 @@ a {
     z-index: 0;
     overflow: hidden;
   }
+
   .loginbackground-gridContainer {
     display: grid;
     grid-template-columns: [start] 1fr [left-gutter] repeat(16, 86.6px) [left-gutter] 1fr [end];
@@ -258,10 +266,11 @@ a {
     transform: rotate(-12deg) skew(-12deg);
     position: relative;
     z-index: 2;
+    height: 100%;
   }
 }
 
-/* Overlay to darken the background image/theme */
+/* Overlay to enhance the background image/theme */
 .loginbackground::before {
   content: '';
   position: absolute;
@@ -269,81 +278,101 @@ a {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
   z-index: 1;
 }
 
 .flex-flex {
   display: flex;
 }
+
 .align-center {
   align-items: center;
 }
+
 .center-center {
   align-items: center;
   justify-content: center;
 }
+
 .box-root {
   box-sizing: border-box;
 }
+
 .flex-direction--column {
   -ms-flex-direction: column;
   flex-direction: column;
 }
+
 .box-divider--light-all-2 {
   box-shadow: inset 0 0 0 2px #e3e8ee;
 }
+
 .box-background--white {
   background-color: #ffffff;
 }
-/* Image Background Styles applied to grid items */
+
+/* Image Background Styles applied to grid items - Red and White Geometric Design */
 .box-background--blue800 {
   background-image: v-bind('`url(${loginBackground})`') !important;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  filter: contrast(1.4) brightness(0.8) saturate(1.2); /* Deep, rich red */
+  filter: contrast(1.3) brightness(0.85) saturate(1.3);
+  opacity: 0.9;
 }
+
 .box-background--blue {
   background-image: v-bind('`url(${loginBackground})`') !important;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  filter: contrast(1.1) brightness(1.1) saturate(1.1); /* Vibrant red */
+  filter: contrast(1.2) brightness(1.05) saturate(1.2);
+  opacity: 0.85;
 }
+
 .box-background--cyan200 {
   background-image: v-bind('`url(${loginBackground})`') !important;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  filter: contrast(1) brightness(1.3) sepia(0.3) saturate(0.8); /* Lighter, pinkish */
+  filter: contrast(1.1) brightness(1.25) sepia(0.2) saturate(0.9);
+  opacity: 0.8;
 }
+
 .box-background--gray100 {
   background-image: v-bind('`url(${loginBackground})`') !important;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  filter: grayscale(0.4) contrast(1.1) brightness(1.2); /* Muted, texture */
+  filter: grayscale(0.3) contrast(1.15) brightness(1.25);
+  opacity: 0.75;
 }
+
 .padding-top--64 {
   padding-top: 64px;
 }
+
 .padding-top--24 {
   padding-top: 24px;
 }
+
 .padding-top--48 {
   padding-top: 48px;
 }
+
 .padding-bottom--24 {
   padding-bottom: 24px;
 }
+
 .padding-horizontal--48 {
   padding: 48px;
 }
+
 .padding-bottom--15 {
   padding-bottom: 15px;
 }
@@ -353,57 +382,67 @@ a {
   justify-content: center;
 }
 
-/* iOS Glassmorphism Card */
+/* White Rounded Card */
 .formbg {
   margin: 0px auto;
   width: 90%;
-  max-width: 448px;
+  max-width: 550px;
   background: #ffffff;
-  border-radius: 24px; /* More rounded */
+  border-radius: 16px;
   box-shadow:
-    0 8px 32px 0 rgba(0, 0, 0, 0.2),
-    0 1px 2px 0 rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+    0 10px 40px 0 rgba(0, 0, 0, 0.15),
+    0 2px 8px 0 rgba(0, 0, 0, 0.1);
+  border: none;
   transition: all 0.3s ease;
+  position: relative;
+  z-index: 10;
 }
+
 @media (min-width: 1920px) {
   .formbg {
-    max-width: 500px;
+    max-width: 650px;
   }
 }
+
 @media (min-width: 2560px) {
   .formbg {
-    max-width: 600px;
+    max-width: 800px;
     padding: 20px;
   }
   span {
     font-size: 24px;
   }
 }
+
 @media (max-width: 480px) {
   .formbg-inner {
-    padding: 24px;
+    padding: 32px 24px;
   }
 }
+
 span {
   display: block;
   font-size: 20px;
   line-height: 28px;
   color: #1a1f36;
 }
+
 label {
   margin-bottom: 10px;
 }
+
 .reset-pass a,
 label {
   font-size: 14px;
   font-weight: 600;
   display: block;
 }
+
 .reset-pass > a {
   text-align: right;
   margin-bottom: 10px;
 }
+
 .grid--50-50 {
   display: grid;
   grid-template-columns: 50% 50%;
@@ -415,17 +454,21 @@ a.ssolink {
   text-align: center;
   font-weight: 600;
 }
+
 .footer-link {
   margin-top: 24px;
   text-align: center;
 }
+
 .footer-link span {
   font-size: 14px;
   color: #697386;
 }
+
 .contact-link {
   vertical-align: baseline;
 }
+
 .listing a {
   color: #697386;
   font-weight: 600;
@@ -435,12 +478,15 @@ a.ssolink {
 .animationRightLeft {
   animation: animationRightLeft 2s ease-in-out infinite;
 }
+
 .animationLeftRight {
   animation: animationLeftRight 2s ease-in-out infinite;
 }
+
 .tans3s {
   animation: animationLeftRight 3s ease-in-out infinite;
 }
+
 .tans4s {
   animation: animationLeftRight 4s ease-in-out infinite;
 }
@@ -484,49 +530,76 @@ a.ssolink {
 .login-form :deep(.el-input__inner) {
   font-size: 16px;
   height: 48px;
+  border-radius: 4px;
 }
 
 .login-form :deep(.el-input__wrapper) {
   padding: 1px 15px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px #dcdfe6 inset;
 }
 
+.login-form :deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px #c0c4cc inset;
+}
+
+.login-form :deep(.el-input.is-focus .el-input__wrapper) {
+  box-shadow: 0 0 0 1px #d32f2f inset;
+}
+
+
 .form-item-spacing {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .login-header {
-  margin-bottom: 30px;
+  margin-bottom: 32px;
   text-align: center;
 }
+
 .login-title {
-  font-size: 22px;
+  font-size: 18px;
   color: #1a1f36;
-  font-weight: 700;
-  line-height: 1.4;
-  letter-spacing: -0.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0;
+  margin: 0;
 }
-.login-alert {
-  margin-bottom: 20px;
-  border-radius: 12px;
-}
+
 .password-label-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
 }
+
 .password-label-row span {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   color: #1a1f36;
 }
+
+.required-asterisk {
+  color: #d32f2f;
+  margin-left: 2px;
+  font-size: 12px;
+}
+
 .forgot-pwd-link {
   font-size: 15px;
   color: #d32f2f;
 }
+
 .checkbox-item {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
+
+.checkbox-item :deep(.el-checkbox__label) {
+  font-size: 14px;
+  color: #1a1f36;
+  font-weight: 400;
+}
+
 .submit-btn {
   width: 100%;
   font-weight: 600;
@@ -536,6 +609,7 @@ a.ssolink {
   background-color: #d32f2f;
   border-color: #d32f2f;
 }
+
 .submit-btn:hover,
 .submit-btn:focus {
   background-color: #b71c1c;
@@ -543,26 +617,30 @@ a.ssolink {
 }
 
 .info-text {
-  margin-top: 24px;
-  text-align: start;
-  font-size: 16px;
+  margin-top: 20px;
+  text-align: left;
+  font-size: 14px;
   color: #d32f2f;
-  font-weight: 600;
+  font-weight: 500;
   display: inline-block;
   width: 100%;
+  line-height: 1.6;
 }
 
 .system-title-container {
   text-align: center;
-  margin-bottom: 10px;
+  margin-bottom: 16px;
 }
 
 .system-title {
-  font-size: 2.2rem;
+  font-size: 2rem;
   color: #d32f2f;
-  font-weight: bold;
+  font-weight: 700;
   display: inline-block;
+  margin: 0;
+  line-height: 1.2;
 }
+
 
 /* Dialog Styles */
 :deep(.custom-dialog) {
@@ -570,45 +648,55 @@ a.ssolink {
   overflow: hidden;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
+
 :deep(.custom-dialog .el-dialog__header) {
   margin: 0;
   padding: 24px 24px 0;
   text-align: center;
 }
+
 :deep(.custom-dialog .el-dialog__title) {
   font-size: 18px;
   font-weight: 600;
   color: #1a1f36;
 }
+
 :deep(.custom-dialog .el-dialog__body) {
   padding: 24px;
 }
+
 :deep(.custom-dialog .el-dialog__footer) {
   padding: 0 24px 24px;
   text-align: center;
 }
+
 .contact-info {
   text-align: center;
 }
+
 .info-icon {
   margin-bottom: 16px;
   display: flex;
   justify-content: center;
 }
+
 .info-icon .el-icon {
   color: #d32f2f;
 }
+
 .info-desc {
   margin-bottom: 24px;
   font-size: 14px;
   color: #697386;
   line-height: 1.5;
 }
+
 .info-detail {
   background-color: #f7fafc;
   border-radius: 8px;
   padding: 16px;
 }
+
 .detail-item {
   display: flex;
   align-items: center;
@@ -618,14 +706,17 @@ a.ssolink {
   font-size: 15px;
   font-weight: 500;
 }
+
 .detail-item:last-child {
   margin-bottom: 0;
 }
+
 .detail-item .el-icon {
   margin-right: 8px;
   color: #d32f2f;
   font-size: 18px;
 }
+
 .dialog-btn {
   width: 100%;
   height: 40px;
@@ -636,7 +727,22 @@ a.ssolink {
   border: none;
   border-radius: 4px;
 }
+
 .dialog-btn:hover {
   background-color: #b71c1c;
 }
+
+.form-container {
+  padding: 20px;
+}
+
+.formbg-outer {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
 </style>
+
+

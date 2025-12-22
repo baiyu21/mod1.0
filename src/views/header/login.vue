@@ -36,20 +36,31 @@ const rules = {
   password: commonRules.password(6)
 }
 
-/**
- * 处理登录提交
- * @async
- * @function onSubmit
- * @description 当用户点击登录按钮时调用，验证表单后执行登录操作
- * @returns {Promise<void>}
- */
-const onSubmit = async () => {
-  await login(loginForm.value)
-}
-
 // 忘记密码对话框
 const forgotPwdDialogVisible = ref(false)
 const rememberMe = ref(false)
+
+// 表单引用，用于表单验证
+const formRef = ref()
+
+/**
+ * 处理登录提交
+ * @async
+ * @function handleLogin
+ * @description 当用户点击登录按钮时调用，验证表单后执行登录操作
+ * @returns {Promise<void>}
+ */
+const handleLogin = async () => {
+  if (!formRef.value) return
+
+  // 表单验证
+  await formRef.value.validate(async (valid: boolean) => {
+    if (valid) {
+      // 验证通过，执行登录
+      await login(loginForm.value)
+    }
+  })
+}
 
 // 处理忘记密码
 const handleForgotPwd = () => {
@@ -100,8 +111,8 @@ const handleForgotPwd = () => {
         </div>
       </div>
       <div
-        class="box-root padding-top--24 flex-flex flex-direction--column"
-        style="flex-grow: 1; z-index: 9; justify-content: center"
+        class="box-root padding-top--24 flex-flex flex-direction--column form-container"
+        style="flex-grow: 1; z-index: 9; justify-content: center; align-items: center"
       >
         <div class="formbg-outer">
           <div class="formbg">
@@ -114,14 +125,18 @@ const handleForgotPwd = () => {
               </div>
 
               <el-form
+                ref="formRef"
                 :model="loginForm"
                 :rules="rules"
-                @submit.prevent="onSubmit"
+                @submit.prevent="handleLogin"
                 label-position="top"
                 size="large"
                 class="login-form"
               >
-                <el-form-item label="账号" prop="username" class="form-item-spacing">
+                <el-form-item prop="username" class="form-item-spacing">
+                  <template #label>
+                    <span>账号</span>
+                  </template>
                   <el-input v-model="loginForm.username" placeholder="请输入账号" />
                 </el-form-item>
 
@@ -155,7 +170,7 @@ const handleForgotPwd = () => {
                     type="primary"
                     :loading="loading"
                     class="submit-btn"
-                    @click="onSubmit"
+                    @click="handleLogin"
                   >
                     {{ loading ? '登录中...' : '登录' }}
                   </el-button>
@@ -222,30 +237,25 @@ const handleForgotPwd = () => {
     sans-serif;
   font-weight: 500;
 }
-
 body {
   min-height: 100%;
   background-color: #ffffff;
 }
-
 h1 {
   letter-spacing: -1px;
 }
-
 a {
   color: #5469d4;
   text-decoration: unset;
 }
-
 .login-root {
-  background: #fff v-bind('`url(${loginBackground})`') no-repeat center center fixed;
+  background: #fff url('/photos/loginbackground.jpg') no-repeat center center fixed;
   background-size: cover;
   display: flex;
   width: 100%;
   min-height: 100vh;
   overflow: hidden;
   position: relative;
-
   .loginbackground {
     min-height: 692px;
     position: fixed;
@@ -256,7 +266,6 @@ a {
     z-index: 0;
     overflow: hidden;
   }
-
   .loginbackground-gridContainer {
     display: grid;
     grid-template-columns: [start] 1fr [left-gutter] repeat(16, 86.6px) [left-gutter] 1fr [end];
@@ -284,90 +293,74 @@ a {
 .flex-flex {
   display: flex;
 }
-
 .align-center {
   align-items: center;
 }
-
 .center-center {
   align-items: center;
   justify-content: center;
 }
-
 .box-root {
   box-sizing: border-box;
 }
-
 .flex-direction--column {
   -ms-flex-direction: column;
   flex-direction: column;
 }
-
 .box-divider--light-all-2 {
   box-shadow: inset 0 0 0 2px #e3e8ee;
 }
-
 .box-background--white {
   background-color: #ffffff;
 }
-
 /* Image Background Styles applied to grid items */
 .box-background--blue800 {
-  background-image: v-bind('`url(${loginBackground})`') !important;
+  background-image: url('/photos/loginbackground.jpg') !important;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  filter: contrast(1.4) brightness(0.8) saturate(1.2);
+  filter: contrast(1.4) brightness(0.8) saturate(1.2); /* Deep, rich red */
 }
-
 .box-background--blue {
-  background-image: v-bind('`url(${loginBackground})`') !important;
+  background-image: url('/photos/loginbackground.jpg') !important;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  filter: contrast(1.1) brightness(1.1) saturate(1.1);
+  filter: contrast(1.1) brightness(1.1) saturate(1.1); /* Vibrant red */
 }
-
 .box-background--cyan200 {
-  background-image: v-bind('`url(${loginBackground})`') !important;
+  background-image: url('/photos/loginbackground.jpg') !important;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  filter: contrast(1) brightness(1.3) sepia(0.3) saturate(0.8);
+  filter: contrast(1) brightness(1.3) sepia(0.3) saturate(0.8); /* Lighter, pinkish */
 }
-
 .box-background--gray100 {
-  background-image: v-bind('`url(${loginBackground})`') !important;
+  background-image: url('/photos/loginbackground.jpg') !important;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  filter: grayscale(0.4) contrast(1.1) brightness(1.2);
+  filter: grayscale(0.4) contrast(1.1) brightness(1.2); /* Muted, texture */
 }
-
 .padding-top--64 {
   padding-top: 64px;
 }
-
 .padding-top--24 {
   padding-top: 24px;
 }
-
 .padding-top--48 {
   padding-top: 48px;
 }
-
 .padding-bottom--24 {
   padding-bottom: 24px;
 }
-
 .padding-horizontal--48 {
   padding: 48px;
 }
-
 .padding-bottom--15 {
   padding-bottom: 15px;
 }
@@ -380,62 +373,54 @@ a {
 /* iOS Glassmorphism Card */
 .formbg {
   margin: 0px auto;
-  width: 90%;
-  max-width: 448px;
+  width: 100%;
+  max-width: 650px;
   background: #ffffff;
-  border-radius: 24px;
+  border-radius: 24px; /* More rounded */
   box-shadow:
     0 8px 32px 0 rgba(0, 0, 0, 0.2),
     0 1px 2px 0 rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.3);
   transition: all 0.3s ease;
 }
-
 @media (min-width: 1920px) {
   .formbg {
-    max-width: 500px;
+    max-width: 650px;
   }
 }
-
 @media (min-width: 2560px) {
   .formbg {
-    max-width: 600px;
+    max-width: 800px;
     padding: 20px;
   }
   span {
     font-size: 24px;
   }
 }
-
 @media (max-width: 480px) {
   .formbg-inner {
     padding: 24px;
   }
 }
-
 span {
   display: block;
   font-size: 20px;
   line-height: 28px;
   color: #1a1f36;
 }
-
 label {
   margin-bottom: 10px;
 }
-
 .reset-pass a,
 label {
   font-size: 14px;
   font-weight: 600;
   display: block;
 }
-
 .reset-pass > a {
   text-align: right;
   margin-bottom: 10px;
 }
-
 .grid--50-50 {
   display: grid;
   grid-template-columns: 50% 50%;
@@ -447,21 +432,17 @@ a.ssolink {
   text-align: center;
   font-weight: 600;
 }
-
 .footer-link {
   margin-top: 24px;
   text-align: center;
 }
-
 .footer-link span {
   font-size: 14px;
   color: #697386;
 }
-
 .contact-link {
   vertical-align: baseline;
 }
-
 .listing a {
   color: #697386;
   font-weight: 600;
@@ -471,15 +452,12 @@ a.ssolink {
 .animationRightLeft {
   animation: animationRightLeft 2s ease-in-out infinite;
 }
-
 .animationLeftRight {
   animation: animationLeftRight 2s ease-in-out infinite;
 }
-
 .tans3s {
   animation: animationLeftRight 3s ease-in-out infinite;
 }
-
 .tans4s {
   animation: animationLeftRight 4s ease-in-out infinite;
 }
@@ -520,6 +498,10 @@ a.ssolink {
   color: #1a1f36;
 }
 
+.login-form :deep(.el-form-item.is-required .el-form-item__label::before) {
+  content: none;
+}
+
 .login-form :deep(.el-input__inner) {
   font-size: 16px;
   height: 48px;
@@ -529,7 +511,6 @@ a.ssolink {
   padding: 1px 15px;
 }
 
-
 .form-item-spacing {
   margin-bottom: 24px;
 }
@@ -538,7 +519,6 @@ a.ssolink {
   margin-bottom: 30px;
   text-align: center;
 }
-
 .login-title {
   font-size: 22px;
   color: #1a1f36;
@@ -546,29 +526,35 @@ a.ssolink {
   line-height: 1.4;
   letter-spacing: -0.5px;
 }
-
+.login-alert {
+  margin-bottom: 20px;
+  border-radius: 12px;
+}
 .password-label-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
 }
-
 .password-label-row span {
   font-size: 16px;
   font-weight: 600;
   color: #1a1f36;
 }
 
+.required-asterisk {
+  color: #d32f2f;
+  margin-left: 2px;
+  font-size: 16px;
+}
+
 .forgot-pwd-link {
   font-size: 15px;
   color: #d32f2f;
 }
-
 .checkbox-item {
   margin-bottom: 20px;
 }
-
 .submit-btn {
   width: 100%;
   font-weight: 600;
@@ -578,7 +564,6 @@ a.ssolink {
   background-color: #d32f2f;
   border-color: #d32f2f;
 }
-
 .submit-btn:hover,
 .submit-btn:focus {
   background-color: #b71c1c;
@@ -607,62 +592,51 @@ a.ssolink {
   display: inline-block;
 }
 
-
 /* Dialog Styles */
 :deep(.custom-dialog) {
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
-
 :deep(.custom-dialog .el-dialog__header) {
   margin: 0;
   padding: 24px 24px 0;
   text-align: center;
 }
-
 :deep(.custom-dialog .el-dialog__title) {
   font-size: 18px;
   font-weight: 600;
   color: #1a1f36;
 }
-
 :deep(.custom-dialog .el-dialog__body) {
   padding: 24px;
 }
-
 :deep(.custom-dialog .el-dialog__footer) {
   padding: 0 24px 24px;
   text-align: center;
 }
-
 .contact-info {
   text-align: center;
 }
-
 .info-icon {
   margin-bottom: 16px;
   display: flex;
   justify-content: center;
 }
-
 .info-icon .el-icon {
   color: #d32f2f;
 }
-
 .info-desc {
   margin-bottom: 24px;
   font-size: 14px;
   color: #697386;
   line-height: 1.5;
 }
-
 .info-detail {
   background-color: #f7fafc;
   border-radius: 8px;
   padding: 16px;
 }
-
 .detail-item {
   display: flex;
   align-items: center;
@@ -672,17 +646,14 @@ a.ssolink {
   font-size: 15px;
   font-weight: 500;
 }
-
 .detail-item:last-child {
   margin-bottom: 0;
 }
-
 .detail-item .el-icon {
   margin-right: 8px;
   color: #d32f2f;
   font-size: 18px;
 }
-
 .dialog-btn {
   width: 100%;
   height: 40px;
@@ -693,10 +664,7 @@ a.ssolink {
   border: none;
   border-radius: 4px;
 }
-
 .dialog-btn:hover {
   background-color: #b71c1c;
 }
 </style>
-
-
