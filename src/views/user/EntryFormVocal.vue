@@ -165,6 +165,7 @@ const buildApiData = (performanceVideo: string, status: 'draft' | 'pending') => 
     group_type: mapGroupType(baseForm.group),
     performer_count: baseForm.chorusCount || members.value.length || 1,
     performance_description: intro.value || '',
+    // 钢琴伴奏：老师 -> 'teacher'，学生 -> 'student'
     piano_accompaniment: baseForm.pianoAccompanist === 'teacher' ? 'teacher' : 'student',
     performance_video: performanceVideo,
     status,
@@ -683,6 +684,7 @@ const onSubmit = async () => {
             style="width: 200px"
             :disabled="readonly"
           >
+            <!-- 老师对应字段：teacher，学生对应字段：student -->
             <el-option label="老师" value="teacher" />
             <el-option label="学生" value="student" />
           </el-select>

@@ -20,9 +20,10 @@
           <el-col :span="12">
             <el-form-item label="表演形式" prop="performanceType">
               <el-select v-model="baseForm.performanceType" placeholder="请选择" style="width: 100%">
+                <el-option label="重奏" value="duet" />
                 <el-option label="合奏" value="ensemble" />
                 <el-option label="小合奏" value="small-ensemble" />
-                <el-option label="重奏" value="chamber" />
+                <el-option label="室内乐" value="chamber" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -325,14 +326,10 @@ const onSave = async () => {
     return
   }
 
-  // 转换花名册数据
-  const guideTeachersData = transformGuideTeachers(teachers.value)
-  const participantsData = transformParticipants(members.value)
-
   // 暂存时不需要上传文件，使用默认值或空字符串
   const workFile = 'https://example.com/path/to/your/file.mp3'
 
-  // 构建 API 数据，status 为 'draft'
+  // 构建 API 数据，status 为 'draft'（内部会自动转换花名册数据）
   const apiData = buildApiData(workFile, 'draft')
 
   console.log('[onSave] 暂存数据:', JSON.stringify(apiData, null, 2))
@@ -488,13 +485,18 @@ const transformParticipants = (members: RosterItem[]) => {
 
 /**
  * 映射表演形式
+ * 对应关系：
+ * - 'duet' -> 'duet' (重奏)
+ * - 'ensemble' -> 'ensemble' (合奏)
+ * - 'small-ensemble' -> 'small_ensemble' (小合奏)
+ * - 'chamber' -> 'chamber' (室内乐)
  */
 const mapPerformanceType = (type: string): string => {
   const typeMap: Record<string, string> = {
+    'duet': 'duet',
     'ensemble': 'ensemble',
     'small-ensemble': 'small_ensemble',
-    'chamber': 'chamber',
-    'solo': 'solo'
+    'chamber': 'chamber'
   }
   return typeMap[type] || type
 }
