@@ -902,6 +902,9 @@ export const logApi = {
       // 直接使用 axios 获取原始响应，绕过响应拦截器，查看后端实际返回的数据
       const axios = (await import('axios')).default
       const { getUserToken } = await import('@/utils/storage')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let result: any = null
+      
       try {
         const token = getUserToken()
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -962,7 +965,7 @@ export const logApi = {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const axiosResponse = await request.get(url, { params: queryParams })
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = axiosResponse as any
+        result = axiosResponse as any
         console.log('[getLogs] request.get 响应:', result)
 
         // 处理响应拦截器处理后的数据
@@ -979,8 +982,6 @@ export const logApi = {
             return result.data
           }
         }
-
-        return []
       }
 
       // 如果 result 是 undefined 或 null，直接返回空数组

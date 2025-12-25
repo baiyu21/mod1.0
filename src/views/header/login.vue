@@ -118,10 +118,10 @@ const handleForgotPwd = () => {
           <div class="formbg">
             <div class="formbg-inner padding-horizontal--48">
               <div class="system-title-container">
-                <h1 class="system-title">中艺展报名系统</h1>
+                <h1 class="system-title">大艺展报名系统</h1>
               </div>
               <div class="login-header">
-                <h2 class="login-title">欢迎登录中艺展报名系统</h2>
+                <h2 class="login-title">欢迎登录大艺展报名系统</h2>
               </div>
 
               <el-form

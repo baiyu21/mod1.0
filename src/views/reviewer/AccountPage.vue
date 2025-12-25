@@ -167,7 +167,7 @@ function getStatusType(status: string): 'success' | 'warning' | 'danger' {
     disabled: 'warning',
     locked: 'danger'
   }
-  return typeMap[status] || 'info'
+  return typeMap[status] || 'warning'
 }
 
 function handleSelectionChange(rows: Account[]) {

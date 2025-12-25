@@ -137,26 +137,91 @@ const teachers = ref<RosterItem[]>([])
 const members = ref<RosterItem[]>([])
 const accomp = ref<RosterItem[]>([])
 
+/**
+ * 构建 API 数据
+ * @param performanceVideo 视频URL（暂存时可以为空或默认值）
+ * @param status 状态：'draft' 暂存 或 'pending' 提交
+ */
+const buildApiData = (performanceVideo: string, status: 'draft' | 'pending') => {
+  // 转换花名册数据
+  const guideTeachersData = transformGuideTeachers(teachers.value)
+  const conductorsData = transformConductors(accomp.value)
+  const allGuideTeachers = [...guideTeachersData, ...conductorsData]
+  const participantsData = transformParticipants(members.value)
+
+  return {
+    performance_type: mapPerformanceType(),
+    duration_minutes: baseForm.minutes || 0,
+    duration_seconds: baseForm.seconds || 0,
+    song1_title: baseForm.song1 || '',
+    song1_is_original: baseForm.song1IsOriginal || false,
+    song1_is_chinese: baseForm.song1HasChinese !== false,
+    song2_title: baseForm.song2 || '',
+    song2_is_original: baseForm.song2IsOriginal || false,
+    song2_is_chinese: baseForm.song2HasChinese !== false,
+    contact_name: baseForm.contact || '',
+    contact_phone: baseForm.phone || '',
+    contact_address: baseForm.address || '',
+    group_type: mapGroupType(baseForm.group),
+    performer_count: baseForm.chorusCount || members.value.length || 1,
+    performance_description: intro.value || '',
+    piano_accompaniment: baseForm.pianoAccompanist === 'teacher' ? 'teacher' : 'student',
+    performance_video: performanceVideo,
+    status,
+    guide_teachers: allGuideTeachers,
+    participants: participantsData
+  }
+}
+
 /* ---- 行为：暂存 / 提交 ---- */
-const onSave = () => {
-  // 暂存当前表单数据到本地存储
-  const saveData = {
-    base: baseForm,
-    intro: intro.value,
-    files: fileList.value,
-    rosters: {
-      teachers: teachers.value,
-      members: members.value,
-      accomp: accomp.value
-    }
+const onSave = async () => {
+  // 表单验证
+  if (!formRef.value) return
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) {
+    ElMessage.warning('请填写完整的表单信息')
+    return
   }
 
+  // 转换花名册数据
+  const guideTeachersData = transformGuideTeachers(teachers.value)
+  const conductorsData = transformConductors(accomp.value)
+  const allGuideTeachers = [...guideTeachersData, ...conductorsData]
+  const participantsData = transformParticipants(members.value)
+
+  // 暂存时不需要上传文件，使用默认值
+  const performanceVideo = 'https://example.com/sample_vocal_video.mp4'
+
+  // 构建 API 数据，status 为 'draft'
+  const apiData = buildApiData(performanceVideo, 'draft')
+
+  // 调用后端接口暂存
   try {
-    localStorage.setItem('voiceFormDraft', JSON.stringify(saveData))
-    ElMessage.success('表单已暂存成功')
+    const success = await registrationApi.submitVocal(apiData)
+    if (success) {
+      ElMessage.success('表单已暂存成功')
+      // 同时保存到 localStorage 作为备份
+      try {
+        const saveData = {
+          base: baseForm,
+          intro: intro.value,
+          files: fileList.value,
+          rosters: {
+            teachers: teachers.value,
+            members: members.value,
+            accomp: accomp.value
+          }
+        }
+        localStorage.setItem('voiceFormDraft', JSON.stringify(saveData))
+      } catch (error) {
+        console.error('保存本地记录失败:', error)
+      }
+    } else {
+      ElMessage.error('暂存失败，请重试')
+    }
   } catch (error) {
     console.error('暂存失败:', error)
-    ElMessage.error('暂存失败，请重试')
+    ElMessage.error('暂存失败，请稍后再试')
   }
 }
 // 重置功能待商议
@@ -352,13 +417,10 @@ const onSubmit = async () => {
     return
   }
 
-  // 上传文件
+  // 先上传文件
   let performanceVideo = 'https://example.com/sample_vocal_video.mp4'
   if (fileList.value.length > 0) {
-    const firstFileUrl = fileUploadRef.value?.getFirstFileUrl()
-    if (firstFileUrl) {
-      performanceVideo = firstFileUrl
-    } else {
+    try {
       ElMessage.info('正在上传文件，请稍候...')
       const uploadedUrls = await fileUploadRef.value?.uploadAllFiles()
       if (uploadedUrls && uploadedUrls.length > 0 && uploadedUrls[0]) {
@@ -367,31 +429,15 @@ const onSubmit = async () => {
         ElMessage.error('文件上传失败，请重试')
         return
       }
+    } catch (error) {
+      console.error('文件上传失败:', error)
+      ElMessage.error('文件上传失败，请重试')
+      return
     }
   }
 
-  // 构建接口数据
-  const apiData = {
-    performance_type: mapPerformanceType(),
-    duration_minutes: baseForm.minutes || 0,
-    duration_seconds: baseForm.seconds || 0,
-    song1_title: baseForm.song1 || '',
-    song1_is_original: baseForm.song1IsOriginal || false,
-    song1_is_chinese: baseForm.song1HasChinese !== false, // 默认为true
-    song2_title: baseForm.song2 || '',
-    song2_is_original: baseForm.song2IsOriginal || false,
-    song2_is_chinese: baseForm.song2HasChinese !== false, // 默认为true
-    contact_name: baseForm.contact || '',
-    contact_phone: baseForm.phone || '',
-    contact_address: baseForm.address || '',
-    group_type: mapGroupType(baseForm.group),
-    performer_count: baseForm.chorusCount || members.value.length || 1,
-    performance_description: intro.value || '',
-    piano_accompaniment: baseForm.pianoAccompanist === 'teacher' ? 'teacher' : 'student',
-    performance_video: performanceVideo,
-    guide_teachers: allGuideTeachers,
-    participants: participantsData
-  }
+  // 构建 API 数据，status 为 'pending'（传入已转换的数据避免重复转换）
+  const apiData = buildApiData(performanceVideo, 'pending')
 
   try {
     console.log('[VocalSubmit] payload:', JSON.stringify(apiData, null, 2))

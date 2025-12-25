@@ -25,7 +25,7 @@ import type { UserRole } from '@/types'
 export const authenticate = async (
   username: string,
   password: string
-): Promise<{ userId: string; role: UserRole; token: string } | null> => {
+): Promise<{ userId: string; role: UserRole; token: string; refreshToken?: string } | null> => {
   if (USE_MOCK) {
     const { authenticate: mockAuthenticate } = await import('./mock')
     return mockAuthenticate(username, password)
@@ -36,7 +36,8 @@ export const authenticate = async (
       return {
         userId: result.userId,
         role: result.role,
-        token: result.token
+        token: result.token,
+        refreshToken: result.refreshToken
       }
     }
     return null

@@ -12,7 +12,7 @@ import { ref, watch } from 'vue'
 import RosterBlock from './RosterBlock.vue'
 import { memberColumnsFull } from '@/composables/useRosterColumns'
 
-type RosterItem = Record<string, string | number | null>
+type RosterItem = Record<string, string | number | null | undefined>
 
 const props = defineProps<{
   rows: RosterItem[]

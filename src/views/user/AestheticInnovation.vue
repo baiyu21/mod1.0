@@ -88,6 +88,7 @@
       <template #header><div class="ef-card-title"><span>上传案例正文</span></div></template>
       <div class="ef-sec-watermark">2</div>
       <FileUploadBlock
+        ref="fileUploadRef"
         v-model="fileList"
         :accept="accepts"
         :limit="6"
@@ -132,6 +133,7 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { InfoFilled } from '@element-plus/icons-vue'
 import FileUploadBlock from '@/components/FileUploadBlock.vue'
 import { commonRules } from '@/composables/useForm'
+import { registrationApi } from '@/services/api'
 
 interface BaseForm {
   caseName: string
@@ -217,28 +219,69 @@ const baseForm = reactive<BaseForm>({
 const intro = ref('')
 const accepts = '.mp3,.wav,.pdf,.jpg,.jpeg,.png'
 const fileList = ref<FileItem[]>([])
-
+const fileUploadRef = ref<InstanceType<typeof FileUploadBlock>>()
 
 const teachers = ref<RosterItem[]>([])
 const members = ref<RosterItem[]>([])
 const accomp = ref<RosterItem[]>([])
-const onSave = () => {
-  const saveData = {
+/**
+ * 构建 API 数据
+ * @param status 状态：'draft' 暂存 或 'pending' 提交
+ */
+const buildApiData = (status: 'draft' | 'pending') => {
+  return {
+    program_type: 'aesthetic_innovation',
     base: baseForm,
     intro: intro.value,
-    files: fileList.value,
+    files: fileList.value.map(f => ({ name: f.name, size: f.size, type: f.type })),
     rosters: {
       teachers: teachers.value,
       members: members.value,
       accomp: accomp.value
-    }
+    },
+    status
   }
+}
+
+const onSave = async () => {
+  // 表单验证
+  if (!formRef.value) return
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) {
+    ElMessage.warning('请填写完整的表单信息')
+    return
+  }
+
+  // 构建 API 数据，status 为 'draft'
+  const apiData = buildApiData('draft')
+
+  // 调用后端接口暂存
   try {
-    localStorage.setItem('aestheticInnovationFormDraft', JSON.stringify(saveData))
-    ElMessage.success('表单已暂存成功')
+    const success = await registrationApi.submitRegistration(apiData)
+    if (success) {
+      ElMessage.success('表单已暂存成功')
+      // 同时保存到 localStorage 作为备份
+      try {
+        const saveData = {
+          base: baseForm,
+          intro: intro.value,
+          files: fileList.value,
+          rosters: {
+            teachers: teachers.value,
+            members: members.value,
+            accomp: accomp.value
+          }
+        }
+        localStorage.setItem('aestheticInnovationFormDraft', JSON.stringify(saveData))
+      } catch (error) {
+        console.error('保存本地记录失败:', error)
+      }
+    } else {
+      ElMessage.error('暂存失败，请重试')
+    }
   } catch (error) {
     console.error('暂存失败:', error)
-    ElMessage.error('暂存失败，请重试')
+    ElMessage.error('暂存失败，请稍后再试')
   }
 }
 // 下载报名须知
@@ -276,13 +319,45 @@ const onSubmit = async () => {
     return
   }
 
-  const payload: SubmitPayload = {
-    base: baseForm,
-    intro: intro.value,
-    files: fileList.value.map(f => ({ name: f.name, size: f.size, type: f.type })),
-    rosters: { teachers: teachers.value, members: members.value, accomp: accomp.value }
+  // 先上传文件
+  if (fileList.value.length > 0) {
+    try {
+      ElMessage.info('正在上传文件，请稍候...')
+      const uploadedUrls = await fileUploadRef.value?.uploadAllFiles()
+      if (!uploadedUrls || uploadedUrls.length === 0) {
+        ElMessage.error('文件上传失败，请重试')
+        return
+      }
+      ElMessage.success('文件上传成功')
+    } catch (error) {
+      console.error('文件上传失败:', error)
+      ElMessage.error('文件上传失败，请重试')
+      return
+    }
   }
-  emit('submit', payload)
+
+  // 构建 API 数据，status 为 'pending'
+  const apiData = buildApiData('pending')
+
+  // 调用后端接口提交
+  try {
+    const success = await registrationApi.submitRegistration(apiData)
+    if (success) {
+      ElMessage.success('提交成功')
+      const payload: SubmitPayload = {
+        base: baseForm,
+        intro: intro.value,
+        files: fileList.value.map(f => ({ name: f.name, size: f.size, type: f.type })),
+        rosters: { teachers: teachers.value, members: members.value, accomp: accomp.value }
+      }
+      emit('submit', payload)
+    } else {
+      ElMessage.error('提交失败，请重试')
+    }
+  } catch (error) {
+    console.error('提交失败:', error)
+    ElMessage.error('提交失败，请稍后再试')
+  }
 }
 </script>
 

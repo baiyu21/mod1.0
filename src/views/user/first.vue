@@ -26,7 +26,6 @@
           <span>报名记录</span>
         </div>
       </template>
-      <div class="ef-sec-watermark">1</div>
 
       <!-- 筛选和搜索工具栏 -->
       <div class="toolbar">
@@ -117,7 +116,6 @@
     <!-- 导出报名表 -->
     <el-card shadow="never" class="ef-section-card">
       <template #header><div class="ef-card-title"><span>导出报名表</span></div></template>
-      <div class="ef-sec-watermark">2</div>
       <div class="export-section">
         <p class="export-desc">您可以选择导出所有报名表数据，或按类别导出特定类型的报名表。</p>
         <el-row :gutter="16" align="middle">
@@ -156,7 +154,6 @@
     <!-- 上传盖章报名表 -->
     <el-card shadow="never" class="ef-section-card">
       <template #header><div class="ef-card-title"><span>上传盖章报名表</span></div></template>
-      <div class="ef-sec-watermark">3</div>
       <el-upload
         v-model:file-list="sealedFileList"
         class="ef-upload-block"

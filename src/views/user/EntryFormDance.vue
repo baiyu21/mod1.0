@@ -198,6 +198,12 @@ interface RosterItem {
   region?: string
   school?: string
   dept?: string
+  age?: number | string
+  grade?: string
+  studentId?: string
+  studentNo?: string
+  // 支持中文字段名和其他动态字段（与组件类型保持一致）
+  [key: string]: string | number | null | undefined
 }
 interface SubmitPayload {
   base: BaseForm
@@ -261,23 +267,87 @@ const fileUploadRef = ref<InstanceType<typeof FileUploadBlock>>()
 const teachers = ref<RosterItem[]>([])
 const members = ref<RosterItem[]>([])
 const accomp = ref<RosterItem[]>([])
-const onSave = () => {
-  const saveData = {
-    base: baseForm,
-    intro: intro.value,
-    files: fileList.value,
-    rosters: {
-      teachers: teachers.value,
-      members: members.value,
-      accomp: accomp.value
-    }
+/**
+ * 构建 API 数据
+ * @param workFile 文件URL（暂存时可以为空或默认值）
+ * @param status 状态：'draft' 暂存 或 'pending' 提交
+ * @param guideTeachersData 已转换的指导教师数据（可选）
+ * @param participantsData 已转换的参赛人员数据（可选）
+ */
+const buildApiData = (
+  workFile: string,
+  status: 'draft' | 'pending',
+  guideTeachersData?: ReturnType<typeof transformGuideTeachers>,
+  participantsData?: ReturnType<typeof transformParticipants>
+) => {
+  const guideTeachers = guideTeachersData || transformGuideTeachers(teachers.value)
+  const participants = participantsData || transformParticipants(members.value)
+
+  return {
+    work_file: workFile,
+    work_title: baseForm.workName || '',
+    performance_type: mapPerformanceType(baseForm.performanceType),
+    duration_minutes: baseForm.minutes || 0,
+    duration_seconds: baseForm.seconds || 0,
+    performer_count: baseForm.count || members.value.length || 1,
+    contact_name: baseForm.contact || '',
+    contact_phone: baseForm.phone || '',
+    contact_address: baseForm.address || '',
+    group_type: mapGroupType(baseForm.group),
+    is_original: baseForm.isOriginal || false,
+    work_description: intro.value || '',
+    status,
+    guide_teachers: guideTeachers,
+    participants
   }
+}
+
+const onSave = async () => {
+  // 表单验证
+  if (!formRef.value) return
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) {
+    ElMessage.warning('请填写完整的表单信息')
+    return
+  }
+
+  // 转换花名册数据
+  const guideTeachersData = transformGuideTeachers(teachers.value)
+  const participantsData = transformParticipants(members.value)
+
+  // 暂存时不需要上传文件，使用默认值
+  const workFile = 'https://example.com/path/to/your/file.mp3'
+
+  // 构建 API 数据，status 为 'draft'
+  const apiData = buildApiData(workFile, 'draft', guideTeachersData, participantsData)
+
+  // 调用后端接口暂存
   try {
-    localStorage.setItem('danceFormDraft', JSON.stringify(saveData))
-    ElMessage.success('表单已暂存成功')
+    const success = await registrationApi.submitDance(apiData)
+    if (success) {
+      ElMessage.success('表单已暂存成功')
+      // 同时保存到 localStorage 作为备份
+      try {
+        const saveData = {
+          base: baseForm,
+          intro: intro.value,
+          files: fileList.value,
+          rosters: {
+            teachers: teachers.value,
+            members: members.value,
+            accomp: accomp.value
+          }
+        }
+        localStorage.setItem('danceFormDraft', JSON.stringify(saveData))
+      } catch (error) {
+        console.error('保存本地记录失败:', error)
+      }
+    } else {
+      ElMessage.error('暂存失败，请重试')
+    }
   } catch (error) {
     console.error('暂存失败:', error)
-    ElMessage.error('暂存失败，请重试')
+    ElMessage.error('暂存失败，请稍后再试')
   }
 }
 const route = useRoute()
@@ -416,40 +486,27 @@ const onSubmit = async () => {
     return
   }
 
+  // 先上传文件
   let workFile = 'https://example.com/path/to/your/file.mp3'
   if (fileList.value.length > 0) {
-    const firstFileUrl = fileUploadRef.value?.getFirstFileUrl()
-    if (firstFileUrl) {
-      workFile = firstFileUrl
-    } else {
+    try {
       ElMessage.info('正在上传文件，请稍候...')
       const uploadedUrls = await fileUploadRef.value?.uploadAllFiles()
-      if (uploadedUrls && uploadedUrls.length > 0) {
+      if (uploadedUrls && uploadedUrls.length > 0 && uploadedUrls[0]) {
         workFile = uploadedUrls[0]
       } else {
         ElMessage.error('文件上传失败，请重试')
         return
       }
+    } catch (error) {
+      console.error('文件上传失败:', error)
+      ElMessage.error('文件上传失败，请重试')
+      return
     }
   }
 
-  const apiData = {
-    work_file: workFile,
-    work_title: baseForm.workName || '',
-    performance_type: mapPerformanceType(baseForm.performanceType),
-    duration_minutes: baseForm.minutes || 0,
-    duration_seconds: baseForm.seconds || 0,
-    performer_count: baseForm.count || members.value.length || 1,
-    contact_name: baseForm.contact || '',
-    contact_phone: baseForm.phone || '',
-    contact_address: baseForm.address || '',
-    group_type: mapGroupType(baseForm.group),
-    is_original: baseForm.isOriginal || false,
-    work_description: intro.value || '',
-    status: 'draft',
-    guide_teachers: guideTeachersData,
-    participants: participantsData
-  }
+  // 构建 API 数据，status 为 'pending'
+  const apiData = buildApiData(workFile, 'pending', guideTeachersData, participantsData)
 
   try {
     const success = await registrationApi.submitDance(apiData)

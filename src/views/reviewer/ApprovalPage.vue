@@ -719,7 +719,7 @@ async function approveRegistration(id: string | number) {
   }
 
   // 必须使用审核记录ID（reviewId），审核操作需要审核记录的ID
-  if (registration.reviewId === undefined || registration.reviewId === null || registration.reviewId === '') {
+  if (registration.reviewId === undefined || registration.reviewId === null) {
     ElMessage.error('无法获取审核记录ID，请刷新页面后重试')
     console.error('[approveRegistration] ❌ 缺少审核记录ID:', {
       frontendId: id,
@@ -846,7 +846,7 @@ async function submitReject() {
   }
 
   // 必须使用审核记录ID（reviewId），审核操作需要审核记录的ID
-  if (registration.reviewId === undefined || registration.reviewId === null || registration.reviewId === '') {
+  if (registration.reviewId === undefined || registration.reviewId === null) {
     ElMessage.error('无法获取审核记录ID，请刷新页面后重试')
     console.error('[submitReject] ❌ 缺少审核记录ID:', {
       frontendId: currentRejectAccount.value,

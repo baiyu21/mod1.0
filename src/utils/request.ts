@@ -128,7 +128,7 @@ export function get<T = any>(
   config?: AxiosRequestConfig
 ): Promise<ApiResponse<T>> {
   // 响应拦截器已经返回了处理后的数据，直接返回（不再提取 .data）
-  return request.get<ApiResponse<T>>(url, { params, ...config }).then((res) => res)
+  return request.get<ApiResponse<T>>(url, { params, ...config }).then((res) => res as unknown as ApiResponse<T>)
 }
 
 /**
@@ -146,7 +146,7 @@ export function post<T = any>(
   config?: AxiosRequestConfig
 ): Promise<ApiResponse<T>> {
   // 响应拦截器已经返回了处理后的数据，直接返回
-  return request.post<ApiResponse<T>>(url, data, config).then((res) => res)
+  return request.post<ApiResponse<T>>(url, data, config).then((res) => res as unknown as ApiResponse<T>)
 }
 
 /**
@@ -202,7 +202,7 @@ export function uploadFile<T = any>(
       'Content-Type': 'multipart/form-data'
     },
     ...config
-  }).then((res) => {
+  }).then((res): ApiResponse<T> => {
     // 文件上传接口可能返回 { success: true, data: { file_url } } 格式
     // 响应拦截器会将没有 code 字段的响应包装为 { code: 200, data: 原始响应 }
     // 所以这里需要检查 data 中是否包含 success 字段
@@ -229,7 +229,7 @@ export function uploadFile<T = any>(
       } as ApiResponse<T>
     }
 
-    return res
+    return res as unknown as ApiResponse<T>
   })
 }
 

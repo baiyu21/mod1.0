@@ -283,24 +283,84 @@ const teachers = ref<RosterItem[]>([])
 const members = ref<RosterItem[]>([])
 const studentAccomp = ref<RosterItem[]>([])
 const teacherAccomp = ref<RosterItem[]>([])
-const onSave = () => {
-  const saveData = {
-    base: baseForm,
-    intro: intro.value,
-    files: fileList.value,
-    rosters: {
-      teachers: teachers.value,
-      members: members.value,
-      studentAccomp: studentAccomp.value,
-      teacherAccomp: teacherAccomp.value
-    }
+/**
+ * 构建 API 数据
+ * @param workFile 文件URL（暂存时可以为空或默认值）
+ * @param status 状态：'draft' 暂存 或 'pending' 提交
+ */
+const buildApiData = (workFile: string, status: 'draft' | 'pending') => {
+  // 转换并合并指导教师和老师伴奏到 guide_teachers
+  const guideTeachersData = transformGuideTeachers(teachers.value)
+  const teacherAccompanistsData = transformTeacherAccompanists(teacherAccomp.value)
+  const allGuideTeachers = [...guideTeachersData, ...teacherAccompanistsData]
+
+  // 转换并合并参演学生和学生伴奏到 participants
+  const participantsData = transformParticipants(members.value)
+  const studentAccompanistsData = transformStudentAccompanists(studentAccomp.value)
+  const allParticipants = [...participantsData, ...studentAccompanistsData]
+
+  return {
+    work_file: workFile,
+    work_title: baseForm.workName || '',
+    performance_type: mapPerformanceType(baseForm.performanceType),
+    duration_minutes: baseForm.minutes || 0,
+    duration_seconds: baseForm.seconds || 0,
+    performer_count: baseForm.count || allParticipants.length || 1,
+    contact_name: baseForm.contact || '',
+    contact_phone: baseForm.phone || '',
+    contact_address: baseForm.address || '',
+    group_type: mapGroupType(baseForm.group),
+    is_original: baseForm.isOriginal || false,
+    work_description: intro.value || '',
+    status,
+    guide_teachers: allGuideTeachers,
+    participants: allParticipants
   }
+}
+
+const onSave = async () => {
+  // 表单验证
+  if (!formRef.value) return
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) {
+    ElMessage.warning('请填写完整的表单信息')
+    return
+  }
+
+  // 暂存时不需要上传文件，使用默认值
+  const workFile = 'https://example.com/sample_opera_video.mp4'
+
+  // 构建 API 数据，status 为 'draft'
+  const apiData = buildApiData(workFile, 'draft')
+
+  // 调用后端接口暂存
   try {
-    localStorage.setItem('operaFormDraft', JSON.stringify(saveData))
-    ElMessage.success('表单已暂存成功')
+    const success = await registrationApi.submitOpera(apiData)
+    if (success) {
+      ElMessage.success('表单已暂存成功')
+      // 同时保存到 localStorage 作为备份
+      try {
+        const saveData = {
+          base: baseForm,
+          intro: intro.value,
+          files: fileList.value,
+          rosters: {
+            teachers: teachers.value,
+            members: members.value,
+            studentAccomp: studentAccomp.value,
+            teacherAccomp: teacherAccomp.value
+          }
+        }
+        localStorage.setItem('operaFormDraft', JSON.stringify(saveData))
+      } catch (error) {
+        console.error('保存本地记录失败:', error)
+      }
+    } else {
+      ElMessage.error('暂存失败，请重试')
+    }
   } catch (error) {
     console.error('暂存失败:', error)
-    ElMessage.error('暂存失败，请重试')
+    ElMessage.error('暂存失败，请稍后再试')
   }
 }
 const route = useRoute()
@@ -531,12 +591,10 @@ const onSubmit = async () => {
     return
   }
 
+  // 先上传文件
   let workFile = 'https://example.com/sample_opera_video.mp4'
   if (fileList.value.length > 0) {
-    const firstFileUrl = fileUploadRef.value?.getFirstFileUrl()
-    if (firstFileUrl) {
-      workFile = firstFileUrl
-    } else {
+    try {
       ElMessage.info('正在上传文件，请稍候...')
       const uploadedUrls = await fileUploadRef.value?.uploadAllFiles()
       if (uploadedUrls && uploadedUrls.length > 0 && uploadedUrls[0]) {
@@ -545,26 +603,15 @@ const onSubmit = async () => {
         ElMessage.error('文件上传失败，请重试')
         return
       }
+    } catch (error) {
+      console.error('文件上传失败:', error)
+      ElMessage.error('文件上传失败，请重试')
+      return
     }
   }
 
-  const apiData = {
-    work_file: workFile,
-    work_title: baseForm.workName || '',
-    performance_type: mapPerformanceType(baseForm.performanceType),
-    duration_minutes: baseForm.minutes || 0,
-    duration_seconds: baseForm.seconds || 0,
-    performer_count: baseForm.count || allParticipants.length || 1,
-    contact_name: baseForm.contact || '',
-    contact_phone: baseForm.phone || '',
-    contact_address: baseForm.address || '',
-    group_type: mapGroupType(baseForm.group),
-    is_original: baseForm.isOriginal || false,
-    work_description: intro.value || '',
-    status: 'draft',
-    guide_teachers: allGuideTeachers, // 包含指导教师（role: "instructor"）和老师伴奏（role: "accompanist"）
-    participants: allParticipants // 包含参演学生（role: "performer"）和学生伴奏（role: "accompanist"）
-  }
+  // 构建 API 数据，status 为 'pending'
+  const apiData = buildApiData(workFile, 'pending')
 
   try {
     console.log('[OperaSubmit] payload:', JSON.stringify(apiData, null, 2))

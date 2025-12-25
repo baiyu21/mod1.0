@@ -345,6 +345,7 @@ const checkAllFilesUploaded = () => {
 
 /**
  * 文件变化处理（文件选择后触发）
+ * 修改：文件只存储在前端，不立即上传，等待用户点击提交时再上传
  */
 const handleFileChange = (file: UploadFiles[number], fileList: UploadFiles) => {
   console.log('[FileUploadBlock] 文件变化:', {
@@ -354,17 +355,17 @@ const handleFileChange = (file: UploadFiles[number], fileList: UploadFiles) => {
     fileListLength: fileList.length
   })
 
-  // 如果文件是新添加的且未上传，且 autoUpload 为 false，则手动触发上传
+  // 文件只存储在前端，不立即上传
+  // 文件将在用户点击提交报名表时，通过 uploadAllFiles() 方法统一上传
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fileStatus = (file as any).status
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fileRaw = (file as any).raw
 
-  // 如果文件状态是 ready（新添加）且不是自动上传模式，则立即上传
-  if (fileStatus === 'ready' && !props.autoUpload && fileRaw instanceof File) {
-    console.log('[FileUploadBlock] 检测到新文件，立即上传:', file.name)
-    // 手动触发上传
-    uploadSingleFile(fileRaw, file)
+  // 设置文件状态为 ready，但不立即上传
+  if (fileStatus === 'ready' && fileRaw instanceof File) {
+    console.log('[FileUploadBlock] 文件已添加到列表，等待提交时上传:', file.name)
+    // 不调用 uploadSingleFile，文件只存储在前端
   }
 }
 

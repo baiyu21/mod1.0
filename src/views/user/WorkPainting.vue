@@ -143,21 +143,80 @@ const transformAuthors = (rows: RosterItem[]) => {
     }))
 }
 
-// 暂存功能
-const onSave = () => {
-  const saveData = {
-    base: baseForm,
-    authorIntro: authorIntro.value,
-    creationIntro: creationIntro.value,
-    files: fileList.value,
-    authors: authors.value
+/**
+ * 构建 API 数据
+ * @param workPhoto 照片URL（暂存时可以为空或默认值）
+ * @param status 状态：'draft' 暂存 或 'pending' 提交
+ */
+const buildApiData = (workPhoto: string, status: 'draft' | 'pending') => {
+  const authorData = transformAuthors(authors.value)
+
+  return {
+    work_title: baseForm.title || '',
+    instructor_name: baseForm.tutor || '',
+    contact_name: baseForm.contact || '',
+    contact_phone: baseForm.phone || '',
+    contact_address: baseForm.address || '',
+    work_length: Number(baseForm.length) || 0,
+    work_width: Number(baseForm.width) || 0,
+    creation_date: baseForm.createAt || '',
+    art_form: mapArtForm(baseForm.formType) || 'chinese_painting',
+    group_type: mapGroupType(baseForm.group),
+    work_photo: workPhoto,
+    author_biography: authorIntro.value || '',
+    creation_description: creationIntro.value || '',
+    is_draft: status === 'draft',
+    status,
+    authors: authorData
   }
+}
+
+// 暂存功能
+const onSave = async () => {
+  // 表单验证
+  if (!formRef.value) return
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) {
+    ElMessage.warning('请填写完整的表单信息')
+    return
+  }
+
+  const authorData = transformAuthors(authors.value)
+  if (authorData.length === 0) {
+    ElMessage.warning('请至少添加一位作者')
+    return
+  }
+
+  // 暂存时不需要上传文件，使用默认值
+  const workPhoto = 'https://example.com/sample_painting.jpg'
+
+  // 构建 API 数据，status 为 'draft'
+  const apiData = buildApiData(workPhoto, 'draft')
+
+  // 调用后端接口暂存
   try {
-    localStorage.setItem('paintingFormDraft', JSON.stringify(saveData))
-    ElMessage.success('表单已暂存成功')
+    const success = await registrationApi.submitPainting(apiData)
+    if (success) {
+      ElMessage.success('表单已暂存成功')
+      // 同时保存到 localStorage 作为备份
+      try {
+        const saveData = {
+          base: baseForm,
+          authorIntro: authorIntro.value,
+          creationIntro: creationIntro.value,
+          files: fileList.value,
+          authors: authors.value
+        }
+        localStorage.setItem('paintingFormDraft', JSON.stringify(saveData))
+      } catch (error) {
+        console.error('保存本地记录失败:', error)
+      }
+    } else {
+      ElMessage.error('暂存失败，请重试')
+    }
   } catch (error) {
     console.error('暂存失败:', error)
-    ElMessage.error('暂存失败，请重试')
+    ElMessage.error('暂存失败，请稍后再试')
   }
 }
 
@@ -202,13 +261,10 @@ const onSubmit = async () => {
     return
   }
 
-  // 上传文件
+  // 先上传文件
   let workPhoto = 'https://example.com/sample_painting.jpg'
   if (fileList.value.length > 0) {
-    const firstFileUrl = fileUploadRef.value?.getFirstFileUrl()
-    if (firstFileUrl) {
-      workPhoto = firstFileUrl
-    } else {
+    try {
       ElMessage.info('正在上传文件，请稍候...')
       const uploadedUrls = await fileUploadRef.value?.uploadAllFiles()
       if (uploadedUrls && uploadedUrls.length > 0 && uploadedUrls[0]) {
@@ -217,26 +273,15 @@ const onSubmit = async () => {
         ElMessage.error('文件上传失败，请重试')
         return
       }
+    } catch (error) {
+      console.error('文件上传失败:', error)
+      ElMessage.error('文件上传失败，请重试')
+      return
     }
   }
 
-  const apiData = {
-    work_title: baseForm.title || '',
-    instructor_name: baseForm.tutor || '',
-    contact_name: baseForm.contact || '',
-    contact_phone: baseForm.phone || '',
-    contact_address: baseForm.address || '',
-    work_length: Number(baseForm.length) || 0,
-    work_width: Number(baseForm.width) || 0,
-    creation_date: baseForm.createAt || '',
-    art_form: mapArtForm(baseForm.formType) || 'chinese_painting',
-    group_type: mapGroupType(baseForm.group),
-    work_photo: workPhoto,
-    author_biography: authorIntro.value || '',
-    creation_description: creationIntro.value || '',
-    is_draft: false,
-    authors: authorData
-  }
+  // 构建 API 数据，status 为 'pending'
+  const apiData = buildApiData(workPhoto, 'pending')
 
   try {
     console.log('[PaintingSubmit] payload:', JSON.stringify(apiData, null, 2))

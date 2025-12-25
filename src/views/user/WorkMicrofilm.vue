@@ -169,21 +169,80 @@ const transformAuthors = (rows: RosterItem[]): Record<string, string>[] => {
     })
 }
 
-// 暂存功能
-const onSave = () => {
-  const saveData = {
-    base: baseForm,
-    authorIntro: authorIntro.value,
-    creationIntro: creationIntro.value,
-    files: fileList.value,
-    authors: authors.value
+/**
+ * 构建 API 数据
+ * @param microFilmVideo 视频URL（暂存时可以为空或默认值）
+ * @param status 状态：'draft' 暂存 或 'pending' 提交
+ */
+const buildApiData = (microFilmVideo: string, status: 'draft' | 'pending') => {
+  const authorsData = transformAuthors(authors.value)
+
+  return {
+    work_title: String(baseForm.title || '').trim(),
+    instructor_1: String(baseForm.tutor1 || '').trim(),
+    instructor_2: String(baseForm.tutor2 || '').trim(),
+    instructor_3: String(baseForm.tutor3 || '').trim(),
+    contact_name: String(baseForm.contact || '').trim(),
+    contact_phone: String(baseForm.phone || '').trim(),
+    contact_address: String(baseForm.address || '').trim(),
+    creation_date: String(baseForm.createAt || '').trim(),
+    video_duration_minutes: Number(baseForm.videoMinutes) || 0,
+    video_duration_seconds: Number(baseForm.videoSeconds) || 0,
+    group: mapGroup(baseForm.group),
+    micro_film_video: microFilmVideo,
+    author_profile: String(authorIntro.value || '').trim(),
+    creation_description: String(creationIntro.value || '').trim(),
+    status,
+    authors: authorsData
   }
+}
+
+// 暂存功能
+const onSave = async () => {
+  // 表单验证
+  if (!formRef.value) return
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) {
+    ElMessage.warning('请填写完整的表单信息')
+    return
+  }
+
+  const authorsData = transformAuthors(authors.value)
+  if (authorsData.length === 0) {
+    ElMessage.warning('请至少添加一个作者')
+    return
+  }
+
+  // 暂存时不需要上传文件，使用默认值
+  const microFilmVideo = 'https://example.com/sample_microfilm_video.mp4'
+
+  // 构建 API 数据，status 为 'draft'
+  const apiData = buildApiData(microFilmVideo, 'draft')
+
+  // 调用后端接口暂存
   try {
-    localStorage.setItem('microfilmFormDraft', JSON.stringify(saveData))
-    ElMessage.success('表单已暂存成功')
+    const success = await registrationApi.submitMicrofilm(apiData)
+    if (success) {
+      ElMessage.success('表单已暂存成功')
+      // 同时保存到 localStorage 作为备份
+      try {
+        const saveData = {
+          base: baseForm,
+          authorIntro: authorIntro.value,
+          creationIntro: creationIntro.value,
+          files: fileList.value,
+          authors: authors.value
+        }
+        localStorage.setItem('microfilmFormDraft', JSON.stringify(saveData))
+      } catch (error) {
+        console.error('保存本地记录失败:', error)
+      }
+    } else {
+      ElMessage.error('暂存失败，请重试')
+    }
   } catch (error) {
     console.error('暂存失败:', error)
-    ElMessage.error('暂存失败，请重试')
+    ElMessage.error('暂存失败，请稍后再试')
   }
 }
 
@@ -230,13 +289,10 @@ const onSubmit = async () => {
     return
   }
 
-  // 处理文件上传
+  // 先上传文件
   let microFilmVideo = 'https://example.com/sample_microfilm_video.mp4'
   if (fileList.value.length > 0) {
-    const firstFileUrl = fileUploadRef.value?.getFirstFileUrl()
-    if (firstFileUrl) {
-      microFilmVideo = firstFileUrl
-    } else {
+    try {
       ElMessage.info('正在上传文件，请稍候...')
       const uploadedUrls = await fileUploadRef.value?.uploadAllFiles()
       if (uploadedUrls && uploadedUrls.length > 0 && uploadedUrls[0]) {
@@ -245,38 +301,15 @@ const onSubmit = async () => {
         ElMessage.error('文件上传失败，请重试')
         return
       }
+    } catch (error) {
+      console.error('文件上传失败:', error)
+      ElMessage.error('文件上传失败，请重试')
+      return
     }
   }
 
-  // 构建接口数据（严格按照后端字段要求）
-  const apiData = {
-    // 作品基本信息
-    work_title: String(baseForm.title || '').trim(),
-    instructor_1: String(baseForm.tutor1 || '').trim(),
-    instructor_2: String(baseForm.tutor2 || '').trim(),
-    instructor_3: String(baseForm.tutor3 || '').trim(), // 可以为空字符串
-
-    // 联系信息
-    contact_name: String(baseForm.contact || '').trim(),
-    contact_phone: String(baseForm.phone || '').trim(),
-    contact_address: String(baseForm.address || '').trim(),
-
-    // 作品详情
-    creation_date: String(baseForm.createAt || '').trim(), // YYYY-MM-DD 格式
-    video_duration_minutes: Number(baseForm.videoMinutes) || 0,
-    video_duration_seconds: Number(baseForm.videoSeconds) || 0,
-    group: mapGroup(baseForm.group), // "group_a" 或 "group_b"
-
-    // 文件
-    micro_film_video: microFilmVideo, // 微电影视频URL
-
-    // 简介
-    author_profile: String(authorIntro.value || '').trim(), // 注意：字段名是 author_profile
-    creation_description: String(creationIntro.value || '').trim(),
-
-    // 作者数组
-    authors: authorsData
-  }
+  // 构建 API 数据，status 为 'pending'
+  const apiData = buildApiData(microFilmVideo, 'pending')
 
   try {
     console.log('[MicrofilmSubmit] payload:', JSON.stringify(apiData, null, 2))

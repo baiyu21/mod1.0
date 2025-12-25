@@ -181,21 +181,79 @@ const transformAuthors = (rows: RosterItem[]): Record<string, string>[] => {
     })
 }
 
-// 暂存功能
-const onSave = () => {
-  const saveData = {
-    base: baseForm,
-    authorIntro: authorIntro.value,
-    creationIntro: creationIntro.value,
-    files: fileList.value,
-    authors: authors.value
+/**
+ * 构建 API 数据
+ * @param workPhoto 照片URL（暂存时可以为空或默认值）
+ * @param status 状态：'draft' 暂存 或 'pending' 提交
+ */
+const buildApiData = (workPhoto: string, status: 'draft' | 'pending') => {
+  const authorsData = transformAuthors(authors.value)
+
+  return {
+    work_title: String(baseForm.title || '').trim(),
+    instructor_name: String(baseForm.tutor || '').trim(),
+    contact_name: String(baseForm.contact || '').trim(),
+    contact_phone: String(baseForm.phone || '').trim(),
+    contact_address: String(baseForm.address || '').trim(),
+    creation_date: String(baseForm.createAt || '').trim(),
+    work_length: String(baseForm.length || '0').trim(),
+    work_width: String(baseForm.width || '0').trim(),
+    art_form: mapArtForm(baseForm.formType),
+    group_type: mapGroupType(baseForm.group),
+    work_photo: workPhoto,
+    author_biography: String(authorIntro.value || '').trim(),
+    creation_description: String(creationIntro.value || '').trim(),
+    status,
+    authors: authorsData
   }
+}
+
+// 暂存功能
+const onSave = async () => {
+  // 表单验证
+  if (!formRef.value) return
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) {
+    ElMessage.warning('请填写完整的表单信息')
+    return
+  }
+
+  const authorsData = transformAuthors(authors.value)
+  if (authorsData.length === 0) {
+    ElMessage.warning('请至少添加一个作者')
+    return
+  }
+
+  // 暂存时不需要上传文件，使用默认值
+  const workPhoto = 'https://example.com/sample_design_photo.jpg'
+
+  // 构建 API 数据，status 为 'draft'
+  const apiData = buildApiData(workPhoto, 'draft')
+
+  // 调用后端接口暂存
   try {
-    localStorage.setItem('designFormDraft', JSON.stringify(saveData))
-    ElMessage.success('表单已暂存成功')
+    const success = await registrationApi.submitDesign(apiData)
+    if (success) {
+      ElMessage.success('表单已暂存成功')
+      // 同时保存到 localStorage 作为备份
+      try {
+        const saveData = {
+          base: baseForm,
+          authorIntro: authorIntro.value,
+          creationIntro: creationIntro.value,
+          files: fileList.value,
+          authors: authors.value
+        }
+        localStorage.setItem('designFormDraft', JSON.stringify(saveData))
+      } catch (error) {
+        console.error('保存本地记录失败:', error)
+      }
+    } else {
+      ElMessage.error('暂存失败，请重试')
+    }
   } catch (error) {
     console.error('暂存失败:', error)
-    ElMessage.error('暂存失败，请重试')
+    ElMessage.error('暂存失败，请稍后再试')
   }
 }
 
@@ -242,13 +300,10 @@ const onSubmit = async () => {
     return
   }
 
-  // 处理文件上传
+  // 先上传文件
   let workPhoto = 'https://example.com/sample_design_photo.jpg'
   if (fileList.value.length > 0) {
-    const firstFileUrl = fileUploadRef.value?.getFirstFileUrl()
-    if (firstFileUrl) {
-      workPhoto = firstFileUrl
-    } else {
+    try {
       ElMessage.info('正在上传文件，请稍候...')
       const uploadedUrls = await fileUploadRef.value?.uploadAllFiles()
       if (uploadedUrls && uploadedUrls.length > 0 && uploadedUrls[0]) {
@@ -257,37 +312,15 @@ const onSubmit = async () => {
         ElMessage.error('文件上传失败，请重试')
         return
       }
+    } catch (error) {
+      console.error('文件上传失败:', error)
+      ElMessage.error('文件上传失败，请重试')
+      return
     }
   }
 
-  // 构建接口数据（严格按照后端字段要求）
-  const apiData = {
-    // 作品基本信息
-    work_title: String(baseForm.title || '').trim(),
-    instructor_name: String(baseForm.tutor || '').trim(),
-
-    // 联系信息
-    contact_name: String(baseForm.contact || '').trim(),
-    contact_phone: String(baseForm.phone || '').trim(),
-    contact_address: String(baseForm.address || '').trim(),
-
-    // 作品详情
-    creation_date: String(baseForm.createAt || '').trim(), // YYYY-MM-DD 格式
-    work_length: String(baseForm.length || '0').trim(), // 字符串格式，如 "50.5"
-    work_width: String(baseForm.width || '0').trim(), // 字符串格式，如 "30.2"
-    art_form: mapArtForm(baseForm.formType), // 中文："平面设计" 或 "立体设计"
-    group_type: mapGroupType(baseForm.group), // 中文："甲组" 或 "乙组"
-
-    // 文件
-    work_photo: workPhoto, // 作品照片URL
-
-    // 简介
-    author_biography: String(authorIntro.value || '').trim(),
-    creation_description: String(creationIntro.value || '').trim(),
-
-    // 作者数组
-    authors: authorsData
-  }
+  // 构建 API 数据，status 为 'pending'
+  const apiData = buildApiData(workPhoto, 'pending')
 
   try {
     console.log('[DesignSubmit] payload:', JSON.stringify(apiData, null, 2))

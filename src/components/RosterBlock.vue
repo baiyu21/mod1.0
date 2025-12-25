@@ -85,7 +85,7 @@ type Column = {
   options?: Array<{ label: string; value: string }>
 }
 
-type RosterItem = Record<string, string | number | null>
+type RosterItem = Record<string, string | number | null | undefined>
 
 const props = defineProps<{
   title: string
